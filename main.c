@@ -44,7 +44,8 @@ int open_connection(int *sockfd){
 }
 
 int main(int argc, char* argv[]){
-  int sockfd, clients[CLIENTS_MAX], clients_connected = 0;
+  int sockfd, clients_connected = 0;
+  struct pollfd clients[CLIENTS_MAX];
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
@@ -53,7 +54,7 @@ int main(int argc, char* argv[]){
     perror("open_connection");
     return 1;
   }
-  struct pollfd poll_settings = {
+  struct pollfd infd_poll_settings = {
     .fd = sockfd,
     .events = POLLIN | POLLOUT
   };
@@ -62,19 +63,24 @@ int main(int argc, char* argv[]){
   while(1){
     if(clients_connected >= CLIENTS_MAX)
       continue;
-    int poll_ret = poll(&poll_settings, 1, 100);
-    if(poll_ret & POLLIN > 0){
-      clients[clients_connected] = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+    int ret_poll = poll(&infd_poll_settings, 1, 100);
+    if(infd_poll_settings.revents & POLLIN > 0){
+      clients[clients_connected].fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+      clients[clients_connected].events = POLLIN | POLLOUT;
       clients_connected++;
       printf("client connected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
-
-    for(int i = 0; i < clients_connected; i++){
-      ssize_t bytes_read = read(clients[i], buffer, 1023);
+    //to prevent writing to the underlying var and messing up the loop
+    int clients_connected_buff = clients_connected;
+    for(int i = 0; i < clients_connected_buff; i++){
+      int client_poll = poll(&clients[i], 1, 100);
+      if((clients[i].revents & POLLIN) == 0)
+	continue;
+      ssize_t bytes_read = read(clients[i].fd, buffer, 1023);
       buffer[bytes_read] = 0;
       printf("%s", buffer);
-      close(clients[i]);
+      close(clients[i].fd);
+      clients_connected--;
     }
-
   }
 }
