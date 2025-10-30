@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <poll.h>
 #include <unistd.h>
 
 #include <sys/socket.h>
@@ -43,7 +44,7 @@ int open_connection(int *sockfd){
 }
 
 int main(int argc, char* argv[]){
-  int sockfd;
+  int sockfd, clients[CLIENTS_MAX], clients_connected = 0;
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
@@ -52,13 +53,28 @@ int main(int argc, char* argv[]){
     perror("open_connection");
     return 1;
   }
+  struct pollfd poll_settings = {
+    .fd = sockfd,
+    .events = POLLIN | POLLOUT
+  };
+
+
   while(1){
-    int peer_fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+    if(clients_connected >= CLIENTS_MAX)
+      continue;
+    int poll_ret = poll(&poll_settings, 1, 100);
+    if(poll_ret & POLLIN > 0){
+      clients[clients_connected] = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+      clients_connected++;
+      printf("client connected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
+    }
 
-    ssize_t bytes_read = read(peer_fd, buffer, 1023);
-    buffer[bytes_read] = 0;
-    printf("%s\n", buffer);
+    for(int i = 0; i < clients_connected; i++){
+      ssize_t bytes_read = read(clients[i], buffer, 1023);
+      buffer[bytes_read] = 0;
+      printf("%s", buffer);
+      close(clients[i]);
+    }
 
-    close(peer_fd);
   }
 }
