@@ -14,6 +14,13 @@
 #define HTTPS_PORT 443
 #define QUEUE_LEN 5
 #define CLIENTS_MAX 10
+#define POLL_TIMEOUT 100
+
+
+typedef struct ll_node{
+  int fd;
+  struct ll_node *next;
+}ll_node;
 
 int open_connection(int *sockfd){
   struct sockaddr_in host_addr;
@@ -45,16 +52,18 @@ int open_connection(int *sockfd){
 
 int main(){
   int sockfd, clients_connected = 0;
-  struct pollfd clients[CLIENTS_MAX];
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
+  ll_node *head = NULL;
+  ll_node *tail = NULL;
 
   if(open_connection(&sockfd) != 0){
     perror("open_connection");
     return 1;
   }
-  struct pollfd infd_poll_settings = {
+  //default poll settings, just add your fd
+  struct pollfd poll_settings = {
     .fd = sockfd,
     .events = POLLIN | POLLOUT
   };
@@ -63,23 +72,35 @@ int main(){
   while(1){
     if(clients_connected >= CLIENTS_MAX)
       continue;
-    int ret_poll = poll(&infd_poll_settings, 1, 100);
-    if((infd_poll_settings.revents & POLLIN) > 0){
-      clients[clients_connected].fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      clients[clients_connected].events = POLLIN | POLLOUT;
+    //check for new connections
+    poll_settings.fd = sockfd;
+    int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
+    if((poll_settings.revents & POLLIN) > 0){
+      ll_node *node = malloc(sizeof(ll_node));
+
+      node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+      if(head == NULL){
+        head = node;
+        tail = node;
+      }else{
+        node->next = NULL;
+        tail->next = node;
+        tail = node;
+      }
       clients_connected++;
       printf("client connected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
-    //to prevent writing to the underlying var and messing up the loop
-    int clients_connected_buff = clients_connected;
-    for(int i = 0; i < clients_connected_buff; i++){
-      int client_poll = poll(&clients[i], 1, 100);
-      if((clients[i].revents & POLLIN) == 0)
-	continue;
-      ssize_t bytes_read = read(clients[i].fd, buffer, 1023);
+
+    //service existing connections
+    for(ll_node *buf = head; buf != NULL; buf = buf->next){
+      poll_settings.fd = buf->fd;
+      int client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
+      if(!(poll_settings.revents & POLLIN))
+        continue;
+      ssize_t bytes_read = read(buf->fd, buffer, 1023);
       buffer[bytes_read] = 0;
       printf("%s", buffer);
-      close(clients[i].fd);
+      close(buf->fd);
       clients_connected--;
     }
   }
