@@ -50,6 +50,12 @@ int open_connection(int *sockfd){
   return 0;
 }
 
+void print_LL(ll_node *head){
+  for(ll_node *buf = head; buf != NULL; buf = buf->next){
+    printf("node: %d\n", buf->fd);
+  }
+}
+
 int main(){
   int sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
@@ -71,7 +77,6 @@ int main(){
     .events = POLLIN | POLLOUT
   };
 
-
   while(1){
     if(clients_connected >= CLIENTS_MAX)
       continue;
@@ -91,7 +96,7 @@ int main(){
 
     //service existing connections
     ll_node *prev_buffer = &head;
-    for(ll_node *buf = head.next; buf != NULL; buf = buf->next){
+    for(ll_node *buf = head.next; buf != NULL; prev_buffer = buf, buf = buf->next){
       poll_settings.fd = buf->fd;
       int client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if(!(poll_settings.revents & POLLIN))
@@ -100,7 +105,13 @@ int main(){
       buffer[bytes_read] = 0;
       printf("%s", buffer);
       close(buf->fd);
+      prev_buffer->next = buf->next;
+      if(prev_buffer->next == NULL)
+        tail = prev_buffer; //if buf is tail move tail back too
+      free(buf);
+      buf = prev_buffer;
       clients_connected--;
+      printf("client disconnected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
   }
 }
