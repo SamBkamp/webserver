@@ -38,27 +38,10 @@ int open_connection(int *sockfd){
   return 0;
 }
 
-/*
-  GET / HTTP/1.1
-Host: fish:6060
-User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0
-Accept: text/html,application/xhtml+xml;
-Accept-Language: en-US,en;q=0.5
-Accept-Encoding: gzip, deflate
-Connection: keep-alive
-Upgrade-Insecure-Requests: 1
-Sec-GPC: 1
-Priority: u=0, i
-Pragma: no-cache
-Cache-Control: no-cache
-
-typedef struct{
-  char method[10];
-  char *path;
-  char *connection;
-  char *host;
-}http_request;
-*/
+void free_http_request(http_request *req){
+  free(req->host);
+  free(req->path);
+}
 int parse_first_line(http_request *req, char* first_line){
   //method
   char *line_token = strtok(first_line, " ");
@@ -69,18 +52,29 @@ int parse_first_line(http_request *req, char* first_line){
   line_token = strtok(NULL, " ");
   if(line_token == NULL)
     return 1;
-  req->path = malloc(strlen(line_token)+1);
+  req->path = malloc(strlen(line_token)+1); //chars are 1 byte (almost always)
   strcpy(req->path, line_token);
   return 0;
 }
 int parse_http_request(http_request *req, char* data){
   char *token = strtok(data, "\r\n");
+  size_t token_length = strlen(token);
   if(token == NULL)
     return 1;
   //first line is different
   if(parse_first_line(req, token) != 0)
     return 1;
   //rest of the lines are normal
+  token = strtok(token+token_length+2, "\r\n");
+  //this weird token+strlen math is to go to the next token of the original call to strtok in this function. parse_first_line makes a call to strtok on the substring passed to it and erasing its data of the first call, so we artificially add it back by passing the (untouched) rest of the string data.
+  while(token != NULL){
+    //printf("%s\n", token);
+    if(strncmp(token, "Host", 4)==0){
+      req->host = malloc(strlen((token+6))+1);
+      strcpy(req->host, (token+6));
+    }
+    token = strtok(NULL, "\r\n");
+  }
   return 0;
 }
 
@@ -143,9 +137,8 @@ int main(){
       http_request req;
       ssize_t bytes_read = read(buf->fd, buffer, 1023);
       buffer[bytes_read] = 0;
-      //printf("%s", buffer);
       parse_http_request(&req, buffer);
-      printf("method: %s | path: %s\n", req.method, req.path);
+      printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
       http_response res = {
         .response_code = 200,
         .content_type = NULL,
@@ -156,6 +149,7 @@ int main(){
 
       //close connection and remove from LL
       close(buf->fd);
+      free_http_request(&req);
       prev_buffer->next = buf->next;
       if(prev_buffer->next == NULL)
         tail = prev_buffer; //if buf is tail move tail back too
