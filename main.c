@@ -15,12 +15,28 @@
 #define QUEUE_LEN 5
 #define CLIENTS_MAX 10
 #define POLL_TIMEOUT 100
-
+#define METHOD_GET 1
+#define METHOD_POST 2
 
 typedef struct ll_node{
   int fd;
   struct ll_node *next;
 }ll_node;
+
+
+typedef struct{
+  uint8_t method;
+  char *path;
+  char *connection;
+  char *host;
+}http_request;
+
+typedef struct{
+  uint8_t response_code;
+  char *content_type;
+  size_t content_length;
+  char *body;
+}http_response;
 
 int open_connection(int *sockfd){
   struct sockaddr_in host_addr;
@@ -50,6 +66,14 @@ int open_connection(int *sockfd){
   return 0;
 }
 
+
+int send_http_response(int sockfd, http_response *res){
+  char buffer[1024];
+  sprintf(buffer, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->content_length, res->body);
+  write(sockfd, buffer, strlen(buffer));
+  return 0;
+}
+
 void print_LL(ll_node *head){
   for(ll_node *buf = head; buf != NULL; buf = buf->next){
     printf("node: %d\n", buf->fd);
@@ -57,6 +81,7 @@ void print_LL(ll_node *head){
 }
 
 int main(){
+  char *hello_world = "<!doctype html><body><h1>Hello, world!</h1></body>";
   int sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
@@ -85,7 +110,6 @@ int main(){
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0){
       ll_node *node = malloc(sizeof(ll_node));
-
       node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
       node->next = NULL;
       tail->next = node;
@@ -97,13 +121,26 @@ int main(){
     //service existing connections
     ll_node *prev_buffer = &head;
     for(ll_node *buf = head.next; buf != NULL; prev_buffer = buf, buf = buf->next){
+
+      //poll socket
       poll_settings.fd = buf->fd;
       int client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if(!(poll_settings.revents & POLLIN))
         continue;
+
+      //read and process data
       ssize_t bytes_read = read(buf->fd, buffer, 1023);
       buffer[bytes_read] = 0;
       printf("%s", buffer);
+      http_response res = {
+        .response_code = 200,
+        .content_type = NULL,
+        .content_length = strlen(hello_world),
+        .body = hello_world
+      };
+      send_http_response(buf->fd, &res);
+
+      //close connection and remove from LL
       close(buf->fd);
       prev_buffer->next = buf->next;
       if(prev_buffer->next == NULL)
