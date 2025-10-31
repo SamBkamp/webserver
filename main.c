@@ -25,7 +25,7 @@ typedef struct ll_node{
 
 
 typedef struct{
-  uint8_t method;
+  char method[10];
   char *path;
   char *connection;
   char *host;
@@ -66,18 +66,57 @@ int open_connection(int *sockfd){
   return 0;
 }
 
+/*
+  GET / HTTP/1.1
+Host: fish:6060
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0
+Accept: text/html,application/xhtml+xml;
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Upgrade-Insecure-Requests: 1
+Sec-GPC: 1
+Priority: u=0, i
+Pragma: no-cache
+Cache-Control: no-cache
+
+typedef struct{
+  char method[10];
+  char *path;
+  char *connection;
+  char *host;
+}http_request;
+*/
+int parse_first_line(http_request *req, char* first_line){
+  //method
+  char *line_token = strtok(first_line, " ");
+  if(line_token == NULL)
+    return 1;
+  strncpy(req->method, line_token, 10);
+  //path
+  line_token = strtok(NULL, " ");
+  if(line_token == NULL)
+    return 1;
+  req->path = malloc(strlen(line_token)*sizeof(char));
+  strcpy(req->path, line_token);
+  return 0;
+}
+int parse_http_request(http_request *req, char* data){
+  char *token = strtok(data, "\r\n");
+  if(token == NULL)
+    return 1;
+  //first line is different
+  if(parse_first_line(req, token) != 0)
+    return 1;
+  //rest of the lines are normal
+  return 0;
+}
 
 int send_http_response(int sockfd, http_response *res){
   char buffer[1024];
   sprintf(buffer, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->content_length, res->body);
   write(sockfd, buffer, strlen(buffer));
   return 0;
-}
-
-void print_LL(ll_node *head){
-  for(ll_node *buf = head; buf != NULL; buf = buf->next){
-    printf("node: %d\n", buf->fd);
-  }
 }
 
 int main(){
@@ -129,9 +168,12 @@ int main(){
         continue;
 
       //read and process data
+      http_request req;
       ssize_t bytes_read = read(buf->fd, buffer, 1023);
       buffer[bytes_read] = 0;
-      printf("%s", buffer);
+      //printf("%s", buffer);
+      parse_http_request(&req, buffer);
+      printf("method: %s | path: %s\n", req.method, req.path);
       http_response res = {
         .response_code = 200,
         .content_type = NULL,
