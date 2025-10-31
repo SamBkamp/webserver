@@ -55,8 +55,11 @@ int main(){
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
-  ll_node *head = NULL;
-  ll_node *tail = NULL;
+  ll_node head = {
+    .fd = 0,
+    .next = NULL
+  };
+  ll_node *tail = &head;
 
   if(open_connection(&sockfd) != 0){
     perror("open_connection");
@@ -79,20 +82,16 @@ int main(){
       ll_node *node = malloc(sizeof(ll_node));
 
       node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      if(head == NULL){
-        head = node;
-        tail = node;
-      }else{
-        node->next = NULL;
-        tail->next = node;
-        tail = node;
-      }
+      node->next = NULL;
+      tail->next = node;
+      tail = node;
       clients_connected++;
       printf("client connected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
 
     //service existing connections
-    for(ll_node *buf = head; buf != NULL; buf = buf->next){
+    ll_node *prev_buffer = &head;
+    for(ll_node *buf = head.next; buf != NULL; buf = buf->next){
       poll_settings.fd = buf->fd;
       int client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if(!(poll_settings.revents & POLLIN))
