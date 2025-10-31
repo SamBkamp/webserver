@@ -43,7 +43,7 @@ int open_connection(int *sockfd){
   return 0;
 }
 
-int main(int argc, char* argv[]){
+int main(){
   int sockfd, clients_connected = 0;
   struct pollfd clients[CLIENTS_MAX];
   struct sockaddr_in peer_addr;
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]){
     if(clients_connected >= CLIENTS_MAX)
       continue;
     int ret_poll = poll(&infd_poll_settings, 1, 100);
-    if(infd_poll_settings.revents & POLLIN > 0){
+    if((infd_poll_settings.revents & POLLIN) > 0){
       clients[clients_connected].fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
       clients[clients_connected].events = POLLIN | POLLOUT;
       clients_connected++;
