@@ -23,7 +23,8 @@ typedef struct{
 }http_request;
 
 typedef struct{
-  uint8_t response_code;
+  uint16_t response_code;
+  char *response_code_text; //todo make this a hashmap
   char *content_type;
   size_t content_length;
   char *body;

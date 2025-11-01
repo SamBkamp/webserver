@@ -13,6 +13,7 @@
 #include "prot.h"
 #include "helper.h"
 
+
 void free_http_request(http_request *req){
   free(req->host);
   free(req->path);
@@ -55,7 +56,7 @@ int parse_http_request(http_request *req, char* data){
 
 int send_http_response(int sockfd, http_response *res){
   char buffer[1024];
-  sprintf(buffer, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->content_length, res->body);
+  sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
   write(sockfd, buffer, strlen(buffer));
   return 0;
 }
@@ -129,12 +130,15 @@ int main(){
       buffer[bytes_read] = 0;
       parse_http_request(&req, buffer);
       printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
+
       http_response res = {
         .response_code = 200,
+        .response_code_text = malloc(3),
         .content_type = NULL,
         .content_length = strlen(file_data),
         .body = file_data
       };
+      strcpy(res.response_code_text, "OK");
       send_http_response(buf->fd, &res);
 
       //close connection and remove from LL
