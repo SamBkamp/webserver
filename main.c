@@ -3,40 +3,15 @@
 #include <string.h>
 #include <poll.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 
 #include "prot.h"
-
-int open_connection(int *sockfd){
-  struct sockaddr_in host_addr;
-  //init socket
-  *sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if(*sockfd < 0)
-    return -1;
-
-  //socket options
-  if(setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) != 0)
-    perror("[NON-FATAL] couldn't set sockopt\n");
-
-  //init address
-  memset(&host_addr, 0, sizeof(struct sockaddr_in));
-  host_addr.sin_family = AF_INET;
-  host_addr.sin_port = htons(HTTP_PORT); //host byte order (le) to network byte order (be)
-  host_addr.sin_addr = (struct in_addr){INADDR_ANY};
-
-  //bind address
-  if(bind(*sockfd, (struct sockaddr *)&host_addr, sizeof(host_addr))!=0)
-    return -1;
-
-
-  //set socket to listening
-  if(listen(*sockfd, QUEUE_LEN) != 0)
-    return -1;
-  return 0;
-}
+#include "helper.h"
 
 void free_http_request(http_request *req){
   free(req->host);
@@ -85,17 +60,32 @@ int send_http_response(int sockfd, http_response *res){
   return 0;
 }
 
+char *open_file(const char* path){
+  int filefd = open(path, O_RDONLY);
+  if(filefd < 0)
+    return (char *)-1;
+  return mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
+}
+
 int main(){
-  char *hello_world = "<!doctype html><body><h1>Hello, world!</h1></body>";
   int sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
+  char *file_data = NULL;
   ll_node head = {
     .fd = 0,
     .next = NULL
   };
   ll_node *tail = &head;
+
+  //open root file
+  file_data = open_file("index.html");
+  if(file_data == (char *)-1){
+    perror("open_file");
+    return 1;
+  }
+
 
   if(open_connection(&sockfd) != 0){
     perror("open_connection");
@@ -142,8 +132,8 @@ int main(){
       http_response res = {
         .response_code = 200,
         .content_type = NULL,
-        .content_length = strlen(hello_world),
-        .body = hello_world
+        .content_length = strlen(file_data),
+        .body = file_data
       };
       send_http_response(buf->fd, &res);
 
