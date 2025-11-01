@@ -2,7 +2,7 @@ FLAGS := -Wall -Wextra -pedantic -ggdb
 
 .PHONY: all
 
-main:main.c
+pws:main.c
 	cc $< ${FLAGS} -o $@
 
-all: main
+all: pws
