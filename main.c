@@ -130,15 +130,23 @@ int main(){
       buffer[bytes_read] = 0;
       parse_http_request(&req, buffer);
       printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
+      http_response res = {0};
 
-      http_response res = {
-        .response_code = 200,
-        .response_code_text = malloc(3),
-        .content_type = NULL,
-        .content_length = strlen(file_data),
-        .body = file_data
-      };
-      strcpy(res.response_code_text, "OK");
+      if(strcmp(req.path, "/") == 0){
+        res.response_code = 200;
+        res.response_code_text = malloc(3);
+        res.content_type = NULL;
+        res.content_length = strlen(file_data);
+        res.body = file_data;
+        strcpy(res.response_code_text, "OK");
+      }else{
+        res.response_code = 404;
+        res.response_code_text = malloc(10);
+        res.content_type = NULL;
+        res.content_length = 0;
+        res.body = NULL;
+        strcpy(res.response_code_text, "NOT FOUND");
+      }
       send_http_response(buf->fd, &res);
 
       //close connection and remove from LL
