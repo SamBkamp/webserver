@@ -68,6 +68,26 @@ char *open_file(const char* path){
   return mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
 }
 
+//TODO: don't pass random data variable to here. Create data structure
+int populate_http_response(http_response *res, http_request *req, char* data){
+  if(strcmp(req->path, "/") == 0){
+    res->response_code = 200;
+    res->response_code_text = malloc(3);
+    res->content_type = NULL;
+    res->content_length = strlen(data);
+    res->body = data;
+    strcpy(res->response_code_text, "OK");
+  }else{
+    res->response_code = 404;
+    res->response_code_text = malloc(10);
+    res->content_type = NULL;
+    res->content_length = 0;
+    res->body = NULL;
+    strcpy(res->response_code_text, "NOT FOUND");
+  }
+  return 0;
+}
+
 int main(){
   int sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
@@ -121,33 +141,24 @@ int main(){
       //poll socket
       poll_settings.fd = buf->fd;
       int client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
-      if(!(poll_settings.revents & POLLIN))
+      if((poll_settings.revents & POLLIN) == 0 || client_poll < 0)
         continue;
 
       //read and process data
-      http_request req;
+      http_request req = {0};
       ssize_t bytes_read = read(buf->fd, buffer, 1023);
       buffer[bytes_read] = 0;
-      parse_http_request(&req, buffer);
-      printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
-      http_response res = {0};
-
-      if(strcmp(req.path, "/") == 0){
-        res.response_code = 200;
-        res.response_code_text = malloc(3);
-        res.content_type = NULL;
-        res.content_length = strlen(file_data);
-        res.body = file_data;
-        strcpy(res.response_code_text, "OK");
+      if(parse_http_request(&req, buffer) < 0
+         || req.path == NULL
+         || req.host == NULL){
+        printf("malformed query sent\n");
       }else{
-        res.response_code = 404;
-        res.response_code_text = malloc(10);
-        res.content_type = NULL;
-        res.content_length = 0;
-        res.body = NULL;
-        strcpy(res.response_code_text, "NOT FOUND");
+        //create and send http response
+        printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
+        http_response res = {0};
+        populate_http_response(&res, &req, file_data);
+        send_http_response(buf->fd, &res);
       }
-      send_http_response(buf->fd, &res);
 
       //close connection and remove from LL
       close(buf->fd);
