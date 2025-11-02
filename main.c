@@ -13,10 +13,11 @@
 #include "prot.h"
 #include "helper.h"
 
-
 void free_http_request(http_request *req){
-  free(req->host);
-  free(req->path);
+  if(req->host != NULL)
+    free(req->host);
+  if(req->path != NULL)
+    free(req->path);
 }
 int parse_first_line(http_request *req, char* first_line){
   //method
@@ -38,8 +39,10 @@ int parse_http_request(http_request *req, char* data){
   if(token == NULL)
     return 1;
   //first line is different
-  if(parse_first_line(req, token) != 0)
+  if(parse_first_line(req, token) != 0){
+    free_http_request(req);
     return 1;
+  }
   //rest of the lines are normal
   token = strtok(token+token_length+2, "\r\n");
   //this weird token+strlen math is to go to the next token of the original call to strtok in this function. parse_first_line makes a call to strtok on the substring passed to it and erasing its data of the first call, so we artificially add it back by passing the (untouched) rest of the string data.
@@ -124,7 +127,7 @@ int main(){
     //check for new connections
     poll_settings.fd = sockfd;
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
-    if((poll_settings.revents & POLLIN) > 0){
+    if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       ll_node *node = malloc(sizeof(ll_node));
       node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
       node->next = NULL;
