@@ -10,6 +10,10 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 #include "prot.h"
 #include "helper.h"
 
@@ -57,10 +61,10 @@ int parse_http_request(http_request *req, char* data){
   return 0;
 }
 
-int send_http_response(int sockfd, http_response *res){
+int send_http_response(SSL *cSSL, http_response *res){
   char buffer[1024];
   sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
-  write(sockfd, buffer, strlen(buffer));
+  SSL_write(cSSL, buffer, strlen(buffer));
   return 0;
 }
 
@@ -103,6 +107,11 @@ int main(){
   };
   ll_node *tail = &head;
 
+  //load openSSL nonsense (algos and strings)
+  OpenSSL_add_all_algorithms();  //surely this can be changed to load just the ones we want?
+  SSL_load_error_strings();
+  SSL_library_init();
+
   //open root file
   file_data = open_file("index.html");
   if(file_data == (char *)-1){
@@ -110,11 +119,13 @@ int main(){
     return 1;
   }
 
-
   if(open_connection(&sockfd) != 0){
     perror("open_connection");
     return 1;
   }
+
+
+
   //default poll settings, just add your fd
   struct pollfd poll_settings = {
     .fd = sockfd,
@@ -130,6 +141,22 @@ int main(){
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       ll_node *node = malloc(sizeof(ll_node));
       node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+
+      SSL_CTX *sslctx = SSL_CTX_new(TLS_server_method()); //create new ssl context
+      SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE); //using single diffie helman, I guess?
+      int use_cert = SSL_CTX_use_certificate_file(sslctx, "certs/cert.pem", SSL_FILETYPE_PEM);
+      int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, "certs/priv.pem", SSL_FILETYPE_PEM);
+      node->cSSL = SSL_new(sslctx);
+      SSL_set_fd(node->cSSL, node->fd);
+      int ssl_err = SSL_accept(node->cSSL);
+      if(ssl_err <= 0){
+        printf("some freaking ssl error\n");
+        close(node->fd);
+        SSL_shutdown(node->cSSL);
+        SSL_free(node->cSSL);
+        free(node);
+        continue;
+      }
       node->next = NULL;
       tail->next = node;
       tail = node;
@@ -149,7 +176,7 @@ int main(){
 
       //read and process data
       http_request req = {0};
-      ssize_t bytes_read = read(buf->fd, buffer, 1023);
+      int bytes_read = SSL_read(buf->cSSL, buffer, 1023);
       buffer[bytes_read] = 0;
       if(parse_http_request(&req, buffer) < 0
          || req.path == NULL
@@ -160,11 +187,13 @@ int main(){
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
         http_response res = {0};
         populate_http_response(&res, &req, file_data);
-        send_http_response(buf->fd, &res);
+        send_http_response(buf->cSSL, &res);
       }
 
       //close connection and remove from LL
       close(buf->fd);
+      SSL_shutdown(buf->cSSL);
+      SSL_free(buf->cSSL);
       free_http_request(&req);
       prev_buffer->next = buf->next;
       if(prev_buffer->next == NULL)

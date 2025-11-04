@@ -6,6 +6,10 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 #include "prot.h"
 #include "helper.h"
 
@@ -23,7 +27,7 @@ int open_connection(int *sockfd){
   //init address
   memset(&host_addr, 0, sizeof(struct sockaddr_in));
   host_addr.sin_family = AF_INET;
-  host_addr.sin_port = htons(HTTP_PORT); //host byte order (le) to network byte order (be)
+  host_addr.sin_port = htons(HTTPS_PORT); //host byte order (le) to network byte order (be)
   host_addr.sin_addr = (struct in_addr){INADDR_ANY};
 
   //bind address

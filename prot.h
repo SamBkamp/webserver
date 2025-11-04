@@ -11,6 +11,7 @@
 
 typedef struct ll_node{
   int fd;
+  SSL *cSSL;
   struct ll_node *next;
 }ll_node;
 
