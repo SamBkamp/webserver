@@ -14,13 +14,15 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include "config.h"
 #include "prot.h"
 #include "helper.h"
 
 int send_http_response(SSL *cSSL, http_response *res){
   char buffer[1024];
-  sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
+  sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);  
   SSL_write(cSSL, buffer, strlen(buffer));
+  free(res->response_code_text);
   return 0;
 }
 
@@ -35,7 +37,7 @@ char *open_file(const char* path){
 int populate_http_response(http_response *res, http_request *req, char* data){
   if(strcmp(req->path, "/") == 0){
     res->response_code = 200;
-    res->response_code_text = malloc(3);
+    res->response_code_text = malloc(3); //this is going to cause such a huge memory leak if ones not super careful
     res->content_type = NULL;
     res->content_length = strlen(data);
     res->body = data;
@@ -51,12 +53,19 @@ int populate_http_response(http_response *res, http_request *req, char* data){
   return 0;
 }
 
+void destroy_node(ll_node *node){
+  close(node->fd);
+  SSL_shutdown(node->cSSL);
+  SSL_free(node->cSSL);
+  free(node);
+}
+
 
 void setup_ssl_socket(ll_node *node){
   SSL_CTX *sslctx = SSL_CTX_new(TLS_server_method()); //create new ssl context
   SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE); //using single diffie helman, I guess?
-  int use_cert = SSL_CTX_use_certificate_file(sslctx, "certs/cert.pem", SSL_FILETYPE_PEM);
-  int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, "certs/priv.pem", SSL_FILETYPE_PEM);
+  int use_cert = SSL_CTX_use_certificate_file(sslctx, CERTIFICATE_FILE, SSL_FILETYPE_PEM);
+  int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, PRIVATE_KEY_FILE, SSL_FILETYPE_PEM);
   node->cSSL = SSL_new(sslctx);
   SSL_set_fd(node->cSSL, node->fd);
 }
@@ -113,10 +122,7 @@ int main(){
       ssl_err = SSL_accept(node->cSSL);
       if(ssl_err <= 0){
         printf("some freaking ssl error\n");
-        close(node->fd);
-        SSL_shutdown(node->cSSL);
-        SSL_free(node->cSSL);
-        free(node);
+        destroy_node(node);
         continue;
       }
       node->next = NULL;
@@ -131,15 +137,14 @@ int main(){
     for(ll_node *buf = head.next; buf != NULL; prev_buffer = buf, buf = buf->next){
       //poll socket
       int client_poll, bytes_read;
-      http_request req;
-      http_response res;
+      http_request req = {0};
+      http_response res = {0};
       poll_settings.fd = buf->fd;
       client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if((poll_settings.revents & POLLIN) == 0 || client_poll < 0)
         continue;
 
       //read and process data
-      req = {0};
       bytes_read = SSL_read(buf->cSSL, buffer, 1023);
       buffer[bytes_read] = 0;
       if(parse_http_request(&req, buffer) < 0
@@ -149,20 +154,16 @@ int main(){
       }else{
         //create and send http response
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
-        res = {0};
         populate_http_response(&res, &req, file_data);
         send_http_response(buf->cSSL, &res);
       }
 
       //close connection and remove from LL
-      close(buf->fd);
-      SSL_shutdown(buf->cSSL);
-      SSL_free(buf->cSSL);
-      free_http_request(&req);
       prev_buffer->next = buf->next;
       if(prev_buffer->next == NULL)
         tail = prev_buffer; //if buf is tail move tail back too
-      free(buf);
+      destroy_node(buf);
+      free_http_request(&req);
       buf = prev_buffer;
       clients_connected--;
       printf("client disconnected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
