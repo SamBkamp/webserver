@@ -147,7 +147,8 @@ int main(){
       //read and process data
       bytes_read = SSL_read(buf->cSSL, buffer, 1023);
       buffer[bytes_read] = 0;
-      if(parse_http_request(&req, buffer) < 0
+      if(bytes_read == 0
+         || parse_http_request(&req, buffer) < 0
          || req.path == NULL
          || req.host == NULL){
         printf("malformed query sent\n");
