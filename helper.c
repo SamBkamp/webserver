@@ -88,3 +88,14 @@ int parse_http_request(http_request *req, char* data){
   }
   return 0;
 }
+
+//stolen from: https://github.com/SamBkamp/c-server/blob/main/main.c
+char* long_to_ip(char* out, unsigned long IP){
+  memset(out, 0, 16); //16 bytes max for an IP string (with nullptr)
+  size_t out_idx = 0;
+  for(size_t i = 0; i < 3; i++){
+    out_idx += sprintf(&out[out_idx], "%d.", ((unsigned char*)&IP)[i]);
+  }
+  out_idx += sprintf(&out[out_idx], "%d", ((unsigned char*)&IP)[3]); //last digit has no trailing .
+  return out;
+}
