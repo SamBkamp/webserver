@@ -3,6 +3,7 @@
 
 #define HTTP_PORT 6060
 #define HTTPS_PORT 443
+#define PORT_IN_USE HTTPS_PORT
 #define CLIENTS_MAX 10
 #define QUEUE_LEN 10
 #define POLL_TIMEOUT 100

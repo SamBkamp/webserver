@@ -17,50 +17,6 @@
 #include "prot.h"
 #include "helper.h"
 
-void free_http_request(http_request *req){
-  if(req->host != NULL)
-    free(req->host);
-  if(req->path != NULL)
-    free(req->path);
-}
-int parse_first_line(http_request *req, char* first_line){
-  //method
-  char *line_token = strtok(first_line, " ");
-  if(line_token == NULL)
-    return 1;
-  strncpy(req->method, line_token, 10);
-  //path
-  line_token = strtok(NULL, " ");
-  if(line_token == NULL)
-    return 1;
-  req->path = malloc(strlen(line_token)+1); //chars are 1 byte (almost always)
-  strcpy(req->path, line_token);
-  return 0;
-}
-int parse_http_request(http_request *req, char* data){
-  char *token = strtok(data, "\r\n");
-  size_t token_length = strlen(token);
-  if(token == NULL)
-    return 1;
-  //first line is different
-  if(parse_first_line(req, token) != 0){
-    free_http_request(req);
-    return 1;
-  }
-  //rest of the lines are normal
-  token = strtok(token+token_length+2, "\r\n");
-  //this weird token+strlen math is to go to the next token of the original call to strtok in this function. parse_first_line makes a call to strtok on the substring passed to it and erasing its data of the first call, so we artificially add it back by passing the (untouched) rest of the string data.
-  while(token != NULL){
-    //printf("%s\n", token);
-    if(strncmp(token, "Host", 4)==0){
-      req->host = malloc(strlen((token+6))+1);
-      strcpy(req->host, (token+6));
-    }
-    token = strtok(NULL, "\r\n");
-  }
-  return 0;
-}
-
 int send_http_response(SSL *cSSL, http_response *res){
   char buffer[1024];
   sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
@@ -123,7 +79,7 @@ int main(){
     perror("open_connection");
     return 1;
   }
-
+  printf("Server started on %d\n", PORT_IN_USE);
 
 
   //default poll settings, just add your fd
