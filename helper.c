@@ -65,7 +65,7 @@ int parse_first_line(http_request *req, char* first_line){
 }
 
 int parse_http_request(http_request *req, char* data){
-  printf("full query: %s\n", data);
+  size_t data_len = strlen(data);
   char *token = strtok(data, "\r\n");
   size_t token_length = strlen(token);
   if(token == NULL)
@@ -76,6 +76,11 @@ int parse_http_request(http_request *req, char* data){
     return 1;
   }
   //rest of the lines are normal
+  //make sure there is actually data after the end of our first token
+  if(token_length+2 > data_len){
+    free_http_request(req);
+    return 1;
+  }
   token = strtok(token+token_length+2, "\r\n");
   //this weird token+strlen math is to go to the next token of the original call to strtok in this function. parse_first_line makes a call to strtok on the substring passed to it and erasing its data of the first call, so we artificially add it back by passing the (untouched) rest of the string data.
   while(token != NULL){
