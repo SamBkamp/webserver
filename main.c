@@ -51,6 +51,16 @@ int populate_http_response(http_response *res, http_request *req, char* data){
   return 0;
 }
 
+
+void setup_ssl_socket(ll_node *node){
+  SSL_CTX *sslctx = SSL_CTX_new(TLS_server_method()); //create new ssl context
+  SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE); //using single diffie helman, I guess?
+  int use_cert = SSL_CTX_use_certificate_file(sslctx, "certs/cert.pem", SSL_FILETYPE_PEM);
+  int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, "certs/priv.pem", SSL_FILETYPE_PEM);
+  node->cSSL = SSL_new(sslctx);
+  SSL_set_fd(node->cSSL, node->fd);
+}
+
 int main(){
   int sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
@@ -95,16 +105,12 @@ int main(){
     poll_settings.fd = sockfd;
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
+      int ssl_err;
+      char ip_string[16];
       ll_node *node = malloc(sizeof(ll_node));
       node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-
-      SSL_CTX *sslctx = SSL_CTX_new(TLS_server_method()); //create new ssl context
-      SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE); //using single diffie helman, I guess?
-      int use_cert = SSL_CTX_use_certificate_file(sslctx, "certs/cert.pem", SSL_FILETYPE_PEM);
-      int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, "certs/priv.pem", SSL_FILETYPE_PEM);
-      node->cSSL = SSL_new(sslctx);
-      SSL_set_fd(node->cSSL, node->fd);
-      int ssl_err = SSL_accept(node->cSSL);
+      setup_ssl_socket(node);
+      ssl_err = SSL_accept(node->cSSL);
       if(ssl_err <= 0){
         printf("some freaking ssl error\n");
         close(node->fd);
@@ -117,22 +123,24 @@ int main(){
       tail->next = node;
       tail = node;
       clients_connected++;
-      printf("client connected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
+      printf("client %s connected! [%d/%d]\n", long_to_ip(ip_string, peer_addr.sin_addr.s_addr), clients_connected, CLIENTS_MAX);
     }
 
     //service existing connections
     ll_node *prev_buffer = &head;
     for(ll_node *buf = head.next; buf != NULL; prev_buffer = buf, buf = buf->next){
-
       //poll socket
+      int client_poll, bytes_read;
+      http_request req;
+      http_response res;
       poll_settings.fd = buf->fd;
-      int client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
+      client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if((poll_settings.revents & POLLIN) == 0 || client_poll < 0)
         continue;
 
       //read and process data
-      http_request req = {0};
-      int bytes_read = SSL_read(buf->cSSL, buffer, 1023);
+      req = {0};
+      bytes_read = SSL_read(buf->cSSL, buffer, 1023);
       buffer[bytes_read] = 0;
       if(parse_http_request(&req, buffer) < 0
          || req.path == NULL
@@ -141,7 +149,7 @@ int main(){
       }else{
         //create and send http response
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
-        http_response res = {0};
+        res = {0};
         populate_http_response(&res, &req, file_data);
         send_http_response(buf->cSSL, &res);
       }
