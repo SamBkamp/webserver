@@ -67,9 +67,10 @@ int parse_first_line(http_request *req, char* first_line){
 int parse_http_request(http_request *req, char* data){
   size_t data_len = strlen(data);
   char *token = strtok(data, "\r\n");
-  size_t token_length = strlen(token);
+  size_t token_length;
   if(token == NULL || *token == 0)
     return 1;
+  token_length = strlen(token);
   //first line is different
   if(parse_first_line(req, token) != 0){
     free_http_request(req);
