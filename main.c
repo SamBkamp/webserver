@@ -67,8 +67,14 @@ int populate_http_response(http_response *res, http_request *req, char* data){
 }
 
 //takes a request struct and sends back appropriate data to client
-int requests_handler(http_request *req, SSL *cSSL, char *file_data){
+int requests_handler(http_request *req, SSL *cSSL){
   http_response res = {0};
+  //open root file
+  char *file_data = open_file("index.html");
+  if(file_data == (char *)-1){
+    perror("open_file");
+    return -1;
+  }
   if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) == 0){
     populate_http_response(&res, req, file_data);
     send_http_response(cSSL, &res);
@@ -81,6 +87,7 @@ int requests_handler(http_request *req, SSL *cSSL, char *file_data){
     send_http_response(cSSL, &res);
     free(res.location);
   }
+  munmap(file_data, 4096);
   return 0;
 }
 
@@ -106,7 +113,6 @@ int main(){
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
-  char *file_data = NULL;
   ll_node head = {
     .fd = 0,
     .next = NULL
@@ -117,13 +123,6 @@ int main(){
   OpenSSL_add_all_algorithms();  //surely this can be changed to load just the ones we want?
   SSL_load_error_strings();
   SSL_library_init();
-
-  //open root file
-  file_data = open_file("index.html");
-  if(file_data == (char *)-1){
-    perror("open_file");
-    return 1;
-  }
 
   if(open_connection(&sockfd) != 0){
     perror("open_connection");
@@ -185,7 +184,7 @@ int main(){
       }else{
         //create and send http response
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
-        requests_handler(&req, buf->cSSL, file_data);
+        requests_handler(&req, buf->cSSL);
       }
       //close connection and remove from LL
       prev_buffer->next = buf->next;
