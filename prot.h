@@ -29,6 +29,7 @@ typedef struct{
   char *response_code_text; //todo make this a hashmap
   char *content_type;
   size_t content_length;
+  char *location;
   char *body;
 }http_response;
 #endif

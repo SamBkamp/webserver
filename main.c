@@ -20,7 +20,17 @@
 
 int send_http_response(SSL *cSSL, http_response *res){
   char buffer[1024];
-  sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);  
+  //response category (ie. first digit of response code)
+  int response_cat = res->response_code - (res->response_code % 100);
+  switch (response_cat){
+  case 300:
+    sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: %s\r\n", res->response_code, res->response_code_text, res->location);
+    break;
+  default:
+    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
+    break;
+  }
+
   SSL_write(cSSL, buffer, strlen(buffer));
   free(res->response_code_text);
   return 0;
@@ -49,6 +59,24 @@ int populate_http_response(http_response *res, http_request *req, char* data){
     res->content_length = 0;
     res->body = NULL;
     strcpy(res->response_code_text, "NOT FOUND");
+  }
+  return 0;
+}
+
+//takes a request struct and sends back appropriate data to client
+int requests_handler(http_request *req, SSL *cSSL, char *file_data){
+  http_response res = {0};
+  if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) == 0){
+    populate_http_response(&res, req, file_data);
+    send_http_response(cSSL, &res);
+  }else{
+    res.response_code = 301;
+    res.response_code_text = malloc(sizeof("Moved Permanently"));
+    res.location = malloc(HOST_NAME_LEN + 8);
+    strcpy(res.response_code_text, "Moved Permanently");
+    sprintf(res.location, "https://%s", HOST_NAME);
+    send_http_response(cSSL, &res);
+    free(res.location);
   }
   return 0;
 }
@@ -138,7 +166,6 @@ int main(){
       //poll socket
       int client_poll, bytes_read;
       http_request req = {0};
-      http_response res = {0};
       poll_settings.fd = buf->fd;
       client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if((poll_settings.revents & POLLIN) == 0 || client_poll < 0)
@@ -155,10 +182,8 @@ int main(){
       }else{
         //create and send http response
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
-        populate_http_response(&res, &req, file_data);
-        send_http_response(buf->cSSL, &res);
+        requests_handler(&req, buf->cSSL, file_data);
       }
-
       //close connection and remove from LL
       prev_buffer->next = buf->next;
       if(prev_buffer->next == NULL)
