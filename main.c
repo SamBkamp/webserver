@@ -42,7 +42,6 @@ int send_http_response(SSL *cSSL, http_response *res){
   }
 
   SSL_write(cSSL, buffer, strlen(buffer));
-  free(res->response_code_text);
   return 0;
 }
 
@@ -78,6 +77,7 @@ int requests_handler(http_request *req, SSL *cSSL){
   if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) == 0){
     populate_http_response(&res, req, file_data);
     send_http_response(cSSL, &res);
+    free(res.response_code_text);
   }else{
     res.response_code = 301;
     res.response_code_text = malloc(sizeof("Moved Permanently"));
@@ -86,6 +86,7 @@ int requests_handler(http_request *req, SSL *cSSL){
     sprintf(res.location, "https://%s", HOST_NAME);
     send_http_response(cSSL, &res);
     free(res.location);
+    free(res.response_code_text);
   }
   munmap(file_data, 4096);
   return 0;
@@ -176,8 +177,7 @@ int main(){
       //read and process data
       bytes_read = SSL_read(buf->cSSL, buffer, 1023);
       buffer[bytes_read] = 0;
-      if(bytes_read == 0
-         || parse_http_request(&req, buffer) < 0
+      if(parse_http_request(&req, buffer) < 0
          || req.path == NULL
          || req.host == NULL){
         printf("malformed query sent\n");
