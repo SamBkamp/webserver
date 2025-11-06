@@ -94,18 +94,14 @@ int requests_handler(http_request *req, SSL *cSSL){
 }
 
 void destroy_node(ll_node *node){
-  close(node->fd);
   SSL_shutdown(node->cSSL);
   SSL_free(node->cSSL);
+  close(node->fd);
   free(node);
 }
 
 
-void setup_ssl_socket(ll_node *node){
-  SSL_CTX *sslctx = SSL_CTX_new(TLS_server_method()); //create new ssl context
-  SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE); //using single diffie helman, I guess?
-  int use_cert = SSL_CTX_use_certificate_file(sslctx, CERTIFICATE_FILE, SSL_FILETYPE_PEM);
-  int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, PRIVATE_KEY_FILE, SSL_FILETYPE_PEM);
+void setup_ssl_socket(ll_node *node, SSL_CTX *sslctx){
   node->cSSL = SSL_new(sslctx);
   SSL_set_fd(node->cSSL, node->fd);
 }
@@ -129,6 +125,12 @@ int main(){
   SSL_load_error_strings();
   SSL_library_init();
 
+  //set up SSL context for all connections
+  SSL_CTX *sslctx = SSL_CTX_new(TLS_server_method()); //create new ssl context
+  SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE); //using single diffie helman, I guess?
+  int use_cert = SSL_CTX_use_certificate_file(sslctx, CERTIFICATE_FILE, SSL_FILETYPE_PEM);
+  int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, PRIVATE_KEY_FILE, SSL_FILETYPE_PEM);
+
   //opens socket, binds to address and sets socket to listening
   if(open_connection(&sockfd) != 0){
     perror("open_connection");
@@ -147,7 +149,7 @@ int main(){
       char ip_string[16];
       ll_node *node = malloc(sizeof(ll_node));
       node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      setup_ssl_socket(node);
+      setup_ssl_socket(node, sslctx);
       ssl_err = SSL_accept(node->cSSL);
       if(ssl_err <= 0){
         printf("some freaking ssl error\n");
@@ -195,4 +197,5 @@ int main(){
       printf("client disconnected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
   }
+  SSL_CTX_free(sslctx);
 }
