@@ -37,7 +37,7 @@ int send_http_response(SSL *cSSL, http_response *res){
     sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: %s\r\n", res->response_code, res->response_code_text, res->location);
     break;
   default:
-    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
+    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
     break;
   }
 
