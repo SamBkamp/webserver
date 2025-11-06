@@ -18,6 +18,16 @@
 #include "prot.h"
 #include "helper.h"
 
+
+char *open_file(const char* path){
+  int filefd = open(path, O_RDONLY);
+  if(filefd < 0)
+    return (char *)-1;
+  char *retval = mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
+  close(filefd);
+  return retval;
+}
+
 int send_http_response(SSL *cSSL, http_response *res){
   char buffer[1024];
   //response category (ie. first digit of response code)
@@ -34,13 +44,6 @@ int send_http_response(SSL *cSSL, http_response *res){
   SSL_write(cSSL, buffer, strlen(buffer));
   free(res->response_code_text);
   return 0;
-}
-
-char *open_file(const char* path){
-  int filefd = open(path, O_RDONLY);
-  if(filefd < 0)
-    return (char *)-1;
-  return mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
 }
 
 //TODO: don't pass random data variable to here. Create data structure
