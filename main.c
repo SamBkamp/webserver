@@ -19,6 +19,31 @@
 #include "helper.h"
 
 
+//retpath should be strlen(document_root) + strlen(path) + 20
+char *format_dirs(char *path, char *ret_path){
+  char append[20], *offset;
+  int dots;
+  if(path[strlen(path)-1] == '/')
+    sprintf(append, "index.html");
+  else
+    *append = 0;
+  sprintf(ret_path,"%s%s%s", DOCUMENT_ROOT, path, append);
+
+  dots = 0;
+  offset = ret_path;
+  while(*offset != 0){
+    if(*offset == '.')
+      dots++;
+    else if(*offset == '/' && dots > 1){
+      *ret_path = (char)-1;
+      break;
+    }else
+      dots = 0;
+    offset++;
+  }
+  return ret_path;
+}
+
 char *open_file(const char* path){
   int filefd = open(path, O_RDONLY);
   if(filefd < 0)
@@ -45,50 +70,39 @@ int send_http_response(SSL *cSSL, http_response *res){
   return 0;
 }
 
-//TODO: don't pass random data variable to here. Create data structure
-int populate_http_response(http_response *res, http_request *req, char* data){
-  if(strcmp(req->path, "/") == 0){
-    res->response_code = 200;
-    res->response_code_text = malloc(3); //this is going to cause such a huge memory leak if ones not super careful
-    res->content_type = NULL;
-    res->content_length = strlen(data);
-    res->body = data;
-    strcpy(res->response_code_text, "OK");
-  }else{
-    res->response_code = 404;
-    res->response_code_text = malloc(10);
-    res->content_type = NULL;
-    res->content_length = 0;
-    res->body = NULL;
-    strcpy(res->response_code_text, "NOT FOUND");
-  }
-  return 0;
-}
-
 //takes a request struct and sends back appropriate data to client
 int requests_handler(http_request *req, SSL *cSSL){
   http_response res = {0};
-  //open root file
-  char *file_data = open_file("index.html");
-  if(file_data == (char *)-1){
-    perror("open_file");
-    return -1;
-  }
-  if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) == 0
-     || strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) == 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
-    populate_http_response(&res, req, file_data);
-    send_http_response(cSSL, &res);
-    free(res.response_code_text);
-  }else{
+  //check if host is valid
+  if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) != 0
+     && strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) != 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
+    char location_buffer[HOST_NAME_LEN + 9];
     res.response_code = 301;
-    res.response_code_text = malloc(sizeof("Moved Permanently"));
-    res.location = malloc(HOST_NAME_LEN + 8);
-    strcpy(res.response_code_text, "Moved Permanently");
+    res.response_code_text = "Moved Permanently";
+    res.location = location_buffer;
     sprintf(res.location, "https://%s", HOST_NAME);
     send_http_response(cSSL, &res);
-    free(res.location);
-    free(res.response_code_text);
+    return 0;
   }
+  //open file
+  char file_path[sizeof(DOCUMENT_ROOT) + strlen(req->path) + 20];
+  format_dirs(req->path, file_path);
+  char *file_data = open_file(file_path);
+
+  //file can't be opened for one reason or another
+  if(file_data == (char *)-1 || *file_path == (char)-1){
+    res.response_code = 404;
+    res.response_code_text = "NOT FOUND";
+    send_http_response(cSSL, &res);
+    return 0;
+  }
+  //if file is valid and openable
+  res.response_code = 200;
+  res.response_code_text = "OK";
+  res.content_type = "text/html";
+  res.content_length = strlen(file_data);
+  res.body = file_data;
+  send_http_response(cSSL, &res);
   munmap(file_data, 4096);
   return 0;
 }
@@ -99,7 +113,6 @@ void destroy_node(ll_node *node){
   close(node->fd);
   free(node);
 }
-
 
 void setup_ssl_socket(ll_node *node, SSL_CTX *sslctx){
   node->cSSL = SSL_new(sslctx);
