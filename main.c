@@ -74,7 +74,8 @@ int requests_handler(http_request *req, SSL *cSSL){
     perror("open_file");
     return -1;
   }
-  if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) == 0){
+  if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) == 0
+     || strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) == 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
     populate_http_response(&res, req, file_data);
     send_http_response(cSSL, &res);
     free(res.response_code_text);
@@ -114,6 +115,9 @@ int main(){
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
+  struct pollfd poll_settings = {   //default poll settings, just add your fd
+    .events = POLLIN | POLLOUT
+  };
   ll_node head = {
     .fd = 0,
     .next = NULL
@@ -125,18 +129,12 @@ int main(){
   SSL_load_error_strings();
   SSL_library_init();
 
+  //opens socket, binds to address and sets socket to listening
   if(open_connection(&sockfd) != 0){
     perror("open_connection");
     return 1;
   }
   printf("Server started on %d\n", PORT_IN_USE);
-
-
-  //default poll settings, just add your fd
-  struct pollfd poll_settings = {
-    .fd = sockfd,
-    .events = POLLIN | POLLOUT
-  };
 
   while(1){
     if(clients_connected >= CLIENTS_MAX)
