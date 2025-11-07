@@ -114,11 +114,6 @@ void destroy_node(ll_node *node){
   free(node);
 }
 
-void setup_ssl_socket(ll_node *node, SSL_CTX *sslctx){
-  node->cSSL = SSL_new(sslctx);
-  SSL_set_fd(node->cSSL, node->fd);
-}
-
 int main(){
   int sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
@@ -162,7 +157,8 @@ int main(){
       char ip_string[16];
       ll_node *node = malloc(sizeof(ll_node));
       node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      setup_ssl_socket(node, sslctx);
+      node->cSSL = SSL_new(sslctx);
+      SSL_set_fd(node->cSSL, node->fd);
       ssl_err = SSL_accept(node->cSSL);
       if(ssl_err <= 0){
         printf("some freaking ssl error\n");
