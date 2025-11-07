@@ -18,6 +18,8 @@
 #include "prot.h"
 #include "helper.h"
 
+root_file_data files;
+
 char *one_hundreds[] = {"Continue", "Switching Protocols"};
 char *two_hundreds[] = {"OK", "Created", "Accepted", 0, "No Content"}; //not all implemented (obviously)
 char *three_hundreds[] = {0, "Moved Permanently", "Found", "See Other"};
@@ -95,6 +97,8 @@ int requests_handler(http_request *req, SSL *cSSL){
   //file can't be opened for one reason or another
   if(file_data == (char *)-1 || *file_path == (char)-1){
     res.response_code = 404;
+    res.body = files.not_found->data;
+    res.content_length = strlen(res.body);
     send_http_response(cSSL, &res);
     return 0;
   }
@@ -115,6 +119,22 @@ void destroy_node(ll_node *node){
   free(node);
 }
 
+void load_default_files(){
+  loaded_file *not_found_file = malloc(sizeof(loaded_file));
+  not_found_file->data = open_file("default/not_found.html");
+  not_found_file->file_path = malloc(strlen("default/not_found.html"));
+  strcpy(not_found_file->file_path, "default/not_found.html");
+  files.not_found = not_found_file;
+
+  loaded_file *internal_server_error = malloc(sizeof(loaded_file));
+  internal_server_error->data = open_file("default/internal_server_error.html");
+  internal_server_error->file_path = malloc(strlen("default/internal_server_error.html"));
+  strcpy(internal_server_error->file_path, "default/internal_server_error.html");
+  files.not_found = not_found_file;
+
+  files.loaded_files = NULL;
+}
+
 int main(){
   int sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
@@ -128,6 +148,10 @@ int main(){
     .next = NULL
   };
   ll_node *tail = &head;
+
+  //load default files into memory
+  //todo: add error checking and maybe also passing files by ref
+  load_default_files();
 
   //load openSSL nonsense (algos and strings)
   OpenSSL_add_all_algorithms();  //surely this can be changed to load just the ones we want?

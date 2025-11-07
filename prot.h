@@ -26,10 +26,21 @@ typedef struct{
 
 typedef struct{
   uint16_t response_code;
-  char *response_code_text; //todo make this a hashmap
   char *content_type;
   size_t content_length;
   char *location;
   char *body;
 }http_response;
+
+typedef struct{
+  char *file_path;
+  char *data;
+}loaded_file;
+
+typedef struct{
+  loaded_file *loaded_files;
+  loaded_file *not_found;
+  loaded_file *internal_server_error;
+}root_file_data;
+
 #endif
