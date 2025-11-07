@@ -18,6 +18,13 @@
 #include "prot.h"
 #include "helper.h"
 
+char *one_hundreds[] = {"Continue", "Switching Protocols"};
+char *two_hundreds[] = {"OK", "Created", "Accepted", 0, "No Content"}; //not all implemented (obviously)
+char *three_hundreds[] = {0, "Moved Permanently", "Found", "See Other"};
+char *four_hundreds[] = {"Bad Request", "Unauthorized", "Payment Required", "Forbidden", "Not Found"};
+char *five_hundreds[] = {"Internal Server Error", "Not Implemented", "Bad Gateway"};
+char **msd[] = {one_hundreds, two_hundreds, three_hundreds, four_hundreds, five_hundreds};
+
 
 //retpath should be strlen(document_root) + strlen(path) + 20
 char *format_dirs(char *path, char *ret_path){
@@ -59,15 +66,14 @@ int send_http_response(SSL *cSSL, http_response *res){
   int response_cat = res->response_code - (res->response_code % 100);
   switch (response_cat){
   case 300:
-    sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: %s\r\n", res->response_code, res->response_code_text, res->location);
+    sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location);
     break;
   default:
-    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, res->response_code_text, res->content_length, res->body);
+    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_length, res->body);
     break;
   }
 
-  SSL_write(cSSL, buffer, strlen(buffer));
-  return 0;
+  return SSL_write(cSSL, buffer, strlen(buffer));
 }
 
 //takes a request struct and sends back appropriate data to client
@@ -76,11 +82,8 @@ int requests_handler(http_request *req, SSL *cSSL){
   //check if host is valid
   if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) != 0
      && strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) != 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
-    char location_buffer[HOST_NAME_LEN + 9];
     res.response_code = 301;
-    res.response_code_text = "Moved Permanently";
-    res.location = location_buffer;
-    sprintf(res.location, "https://%s", HOST_NAME);
+    res.location = HOST_NAME;
     send_http_response(cSSL, &res);
     return 0;
   }
@@ -92,13 +95,11 @@ int requests_handler(http_request *req, SSL *cSSL){
   //file can't be opened for one reason or another
   if(file_data == (char *)-1 || *file_path == (char)-1){
     res.response_code = 404;
-    res.response_code_text = "NOT FOUND";
     send_http_response(cSSL, &res);
     return 0;
   }
   //if file is valid and openable
   res.response_code = 200;
-  res.response_code_text = "OK";
   res.content_type = "text/html";
   res.content_length = strlen(file_data);
   res.body = file_data;
