@@ -14,7 +14,7 @@
 #include "helper.h"
 
 char *get_file_type(char* path){
-  If(path == NULL)
+  if(path == NULL)
     return (char *)-1;
   char *end = path + strlen(path)-1;
 
