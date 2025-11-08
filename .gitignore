@@ -4,3 +4,4 @@ main
 pws
 certs/**
 config.h
+data/**
