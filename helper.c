@@ -13,6 +13,16 @@
 #include "prot.h"
 #include "helper.h"
 
+char *get_file_type(char* path){
+  If(path == NULL)
+    return (char *)-1;
+  char *end = path + strlen(path)-1;
+
+  while(end != path-1 && *end != '.')
+    end--;
+  return end+1;
+}
+
 int open_connection(int *sockfd){
   struct sockaddr_in host_addr;
   //init socket

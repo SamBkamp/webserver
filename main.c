@@ -71,7 +71,7 @@ int send_http_response(SSL *cSSL, http_response *res){
     sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location);
     break;
   default:
-    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: text/html\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_length, res->body);
+    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, res->body);
     break;
   }
 
@@ -99,12 +99,16 @@ int requests_handler(http_request *req, SSL *cSSL){
     res.response_code = 404;
     res.body = files.not_found->data;
     res.content_length = strlen(res.body);
+    res.content_type = "text/html";
     send_http_response(cSSL, &res);
     return 0;
   }
+  //todo, do this with something simpler (and faster) than printf family
+  char content_buffer[20];
+  snprintf(content_buffer, 20, "text/%s", get_file_type(file_path));
   //if file is valid and openable
   res.response_code = 200;
-  res.content_type = "text/html";
+  res.content_type = content_buffer;
   res.content_length = strlen(file_data);
   res.body = file_data;
   send_http_response(cSSL, &res);
