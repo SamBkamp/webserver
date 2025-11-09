@@ -25,10 +25,10 @@ void print_SSL_accept_err(int SSL_err){
     printf("Fatal I/O Error\n");
     break;
   case SSL_ERROR_SSL:
-    printf("Fatal SSL Library Error (most likely protocol error)");
+    printf("Fatal SSL Library Error (most likely protocol error)\n");
     break;
   default:
-    printf("some freaking SSL error");
+    printf("some freaking SSL error\n");
     break;
   }
 }
