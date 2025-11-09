@@ -6,4 +6,5 @@ int parse_http_request(http_request *req, char* data);
 void free_http_request(http_request *req);
 char* long_to_ip(char* out, unsigned long IP);
 char *get_file_type(char* path);
+void print_SSL_accept_err(int SSL_err);
 #endif

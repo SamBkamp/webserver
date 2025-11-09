@@ -13,6 +13,26 @@
 #include "prot.h"
 #include "helper.h"
 
+void print_SSL_accept_err(int SSL_err){
+  switch(SSL_err){
+  case SSL_ERROR_ZERO_RETURN:
+    printf("Connection close by peer: sent close_notify\n");
+    break;
+  case SSL_ERROR_WANT_READ:
+    printf("Operation did not complete, can be retried later\n");
+    break;
+  case SSL_ERROR_SYSCALL:
+    printf("Fatal I/O Error\n");
+    break;
+  case SSL_ERROR_SSL:
+    printf("Fatal SSL Library Error (most likely protocol error)");
+    break;
+  default:
+    printf("some freaking SSL error");
+    break;
+  }
+}
+
 char *get_file_type(char* path){
   if(path == NULL)
     return (char *)-1;

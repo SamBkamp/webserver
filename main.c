@@ -190,7 +190,9 @@ int main(){
       SSL_set_fd(node->cSSL, node->fd);
       ssl_err = SSL_accept(node->cSSL);
       if(ssl_err <= 0){
-        printf("some freaking ssl error\n");
+        //i HATE openssl error handling
+        fputs(SSL_ERROR_PREPEND, stdout);
+        print_SSL_accept_err(SSL_get_error(node->cSSL, ssl_err));
         destroy_node(node);
         continue;
       }
