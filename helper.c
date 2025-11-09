@@ -43,7 +43,7 @@ char *get_file_type(char* path){
   return end+1;
 }
 
-int open_connection(int *sockfd){
+int open_connection(int *sockfd, int port){
   struct sockaddr_in host_addr;
   //init socket
   *sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -57,7 +57,7 @@ int open_connection(int *sockfd){
   //init address
   memset(&host_addr, 0, sizeof(struct sockaddr_in));
   host_addr.sin_family = AF_INET;
-  host_addr.sin_port = htons(HTTPS_PORT); //host byte order (le) to network byte order (be)
+  host_addr.sin_port = htons(port); //host byte order (le) to network byte order (be)
   host_addr.sin_addr = (struct in_addr){INADDR_ANY};
 
   //bind address

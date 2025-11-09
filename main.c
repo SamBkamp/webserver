@@ -140,7 +140,7 @@ void load_default_files(){
 }
 
 int main(){
-  int sockfd, clients_connected = 0;
+  int ssl_sockfd, unsecured_sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
   socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
@@ -169,23 +169,47 @@ int main(){
   int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, PRIVATE_KEY_FILE, SSL_FILETYPE_PEM);
 
   //opens socket, binds to address and sets socket to listening
-  if(open_connection(&sockfd) != 0){
-    perror("open_connection");
+  if(open_connection(&ssl_sockfd, HTTPS_PORT) != 0){
+    perror("open_connection SSL");
     return 1;
   }
-  printf("Server started on %d\n", PORT_IN_USE);
+  printf("SSL port opened on %d\n", HTTPS_PORT);
+
+  if(open_connection(&unsecured_sockfd, HTTP_PORT) != 0){
+    perror("open_connection unsecured");
+    return 1;
+  }
+  printf("unsecured port opened on %d\n", HTTP_PORT);
 
   while(1){
+    //check for unsecured connections (on port 80)
+    poll_settings.fd = unsecured_sockfd;
+    int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
+    if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
+      int unsec_fd = accept(unsecured_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+      http_request req;
+      char redirected_buffer[1024];
+      redirected_buffer[read(unsec_fd, redirected_buffer, 1023)] = 0;
+      //lowkey an abomination
+      //utilised the fact that printf family returns amount of chars written, saves a call to strlen
+      if(parse_first_line(&req, redirected_buffer) == 0)
+        write(unsec_fd, redirected_buffer, snprintf(redirected_buffer, 1023, "HTTP/1.1 301 Moved Permanently\r\nLocation: https://%s%s\r\nConnection: close\r\n", HOST_NAME, req.path));
+
+      fputs(WARNING_PREPEND, stdout);
+      puts(" unsecured connection dealth with");
+      close(unsec_fd);
+      continue;
+    }
     if(clients_connected >= CLIENTS_MAX)
       continue;
     //check for new connections
-    poll_settings.fd = sockfd;
-    int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
+    poll_settings.fd = ssl_sockfd;
+    ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       int ssl_err;
       char ip_string[16];
       ll_node *node = malloc(sizeof(ll_node));
-      node->fd = accept(sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+      node->fd = accept(ssl_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
       node->cSSL = SSL_new(sslctx);
       SSL_set_fd(node->cSSL, node->fd);
       ssl_err = SSL_accept(node->cSSL);
