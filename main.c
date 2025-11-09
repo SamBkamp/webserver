@@ -220,7 +220,7 @@ int main(){
       if(parse_http_request(&req, buffer) < 0
          || req.path == NULL
          || req.host == NULL){
-        printf("malformed query sent\nrequest: %s\n", buffer);
+        printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, buffer);
       }else{
         //create and send http response
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
