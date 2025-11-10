@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -134,4 +136,13 @@ char* long_to_ip(char* out, unsigned long IP){
   }
   out_idx += sprintf(&out[out_idx], "%d", ((unsigned char*)&IP)[3]); //last digit has no trailing .
   return out;
+}
+//OPENS FOR READ ONLY
+char *open_file(char *path){
+  int filefd = open(path, O_RDONLY);
+  if(filefd < 0)
+    return (char *)-1;
+  char *retval = mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
+  close(filefd);
+  return retval;
 }

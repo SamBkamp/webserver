@@ -3,8 +3,6 @@
 #include <string.h>
 #include <poll.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -17,6 +15,9 @@
 #include "config.h"
 #include "prot.h"
 #include "helper.h"
+
+//I reckon this implementation might be temporary
+#define MAX_OPEN_FILES 20
 
 root_file_data files;
 
@@ -52,14 +53,33 @@ char *format_dirs(char *path, char *ret_path){
   }
   return ret_path;
 }
+//file handler: handles file loading and caching. Simply returns file contents. Lazy loads into the cache
+char *get_file_data(char* path){
+  loaded_file *file = files.loaded_files;
+  size_t i = 0;
+  while(i < MAX_OPEN_FILES
+        && file->file_path != NULL
+        && strcmp(file->file_path, path)!=0){
+    file++;
+    i++;
+  }
 
-char *open_file(const char* path){
-  int filefd = open(path, O_RDONLY);
-  if(filefd < 0)
-    return (char *)-1;
-  char *retval = mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
-  close(filefd);
-  return retval;
+  //cached file hit
+  if(i < MAX_OPEN_FILES && file->file_path != NULL)
+    return file->data;
+
+  //cache miss
+  char *file_data = open_file(path);
+  loaded_file *new_load;
+  //space to allocate
+  if(file->file_path == NULL)
+    new_load = file;
+  else//no space to allocate (allocate to first)
+    new_load = files.loaded_files;
+
+  new_load->file_path = path;
+  new_load->data = file_data;
+  return file_data;
 }
 
 int send_http_response(SSL *cSSL, http_response *res){
@@ -92,7 +112,7 @@ int requests_handler(http_request *req, SSL *cSSL){
   //open file
   char file_path[sizeof(DOCUMENT_ROOT) + strlen(req->path) + 20];
   format_dirs(req->path, file_path);
-  char *file_data = open_file(file_path);
+  char *file_data = get_file_data(file_path);
 
   //file can't be opened for one reason or another
   if(file_data == (char *)-1 || *file_path == (char)-1){
@@ -112,7 +132,6 @@ int requests_handler(http_request *req, SSL *cSSL){
   res.content_length = strlen(file_data);
   res.body = file_data;
   send_http_response(cSSL, &res);
-  munmap(file_data, 4096);
   return 0;
 }
 
@@ -123,20 +142,21 @@ void destroy_node(ll_node *node){
   free(node);
 }
 
-void load_default_files(){
-  loaded_file *not_found_file = malloc(sizeof(loaded_file));
-  not_found_file->data = open_file("default/not_found.html");
+int load_default_files(){
+  loaded_file *not_found_file, *internal_server_error;
+
+  not_found_file = malloc(sizeof(loaded_file));
   not_found_file->file_path = malloc(strlen("default/not_found.html"));
   strcpy(not_found_file->file_path, "default/not_found.html");
+  not_found_file->data = open_file(not_found_file->file_path);
   files.not_found = not_found_file;
 
-  loaded_file *internal_server_error = malloc(sizeof(loaded_file));
-  internal_server_error->data = open_file("default/internal_server_error.html");
+  internal_server_error = malloc(sizeof(loaded_file));
   internal_server_error->file_path = malloc(strlen("default/internal_server_error.html"));
   strcpy(internal_server_error->file_path, "default/internal_server_error.html");
-  files.not_found = not_found_file;
-
-  files.loaded_files = NULL;
+  internal_server_error->data = open_file(internal_server_error->file_path);
+  files.internal_server_error = internal_server_error;
+  return 0;
 }
 
 int main(){
@@ -152,6 +172,12 @@ int main(){
     .next = NULL
   };
   ll_node *tail = &head;
+
+  files.loaded_files = malloc(sizeof(loaded_file)*MAX_OPEN_FILES);
+  for(size_t i = 0; i < MAX_OPEN_FILES; i++){
+    files.loaded_files[i].file_path = NULL;
+    files.loaded_files[i].data = NULL;
+  }
 
   //load default files into memory
   //todo: add error checking and maybe also passing files by ref
