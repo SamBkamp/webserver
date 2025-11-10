@@ -250,7 +250,7 @@ int main(){
       tail->next = node;
       tail = node;
       clients_connected++;
-      printf("client %s connected! [%d/%d]\n", long_to_ip(ip_string, peer_addr.sin_addr.s_addr), clients_connected, CLIENTS_MAX);
+      //printf("client %s connected! [%d/%d]\n", long_to_ip(ip_string, peer_addr.sin_addr.s_addr), clients_connected, CLIENTS_MAX);
     }
 
     //service existing connections
@@ -284,7 +284,7 @@ int main(){
       free_http_request(&req);
       buf = prev_buffer;
       clients_connected--;
-      printf("client disconnected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
+      //printf("client disconnected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
   }
   SSL_CTX_free(sslctx);
