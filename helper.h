@@ -8,4 +8,5 @@ char* long_to_ip(char* out, unsigned long IP);
 char *get_file_type(char* path);
 void print_SSL_accept_err(int SSL_err);
 char *open_file(char *path);
+void send_plaintext_301(int sockfd);
 #endif

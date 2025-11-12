@@ -21,8 +21,9 @@
 
 root_file_data files;
 
+//not all implemented (obviously)
 char *one_hundreds[] = {"Continue", "Switching Protocols"};
-char *two_hundreds[] = {"OK", "Created", "Accepted", 0, "No Content"}; //not all implemented (obviously)
+char *two_hundreds[] = {"OK", "Created", "Accepted", 0, "No Content"};
 char *three_hundreds[] = {0, "Moved Permanently", "Found", "See Other"};
 char *four_hundreds[] = {"Bad Request", "Unauthorized", "Payment Required", "Forbidden", "Not Found"};
 char *five_hundreds[] = {"Internal Server Error", "Not Implemented", "Bad Gateway"};
@@ -99,10 +100,12 @@ int send_http_response(SSL *cSSL, http_response *res){
     break;
   }
 
-  return SSL_write(cSSL, buffer, strlen(buffer));
+  if(cSSL != NULL)
+    return SSL_write(cSSL, buffer, strlen(buffer));
 }
 
 //takes a request struct and sends back appropriate data to client
+//the http workhorse
 int requests_handler(http_request *req, SSL *cSSL){
   http_response res = {0};
   //check if host is valid
@@ -219,16 +222,7 @@ int main(){
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       int unsec_fd = accept(unsecured_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      http_request req;
-      char redirected_buffer[1024];
-      redirected_buffer[read(unsec_fd, redirected_buffer, 1023)] = 0;
-      //lowkey an abomination
-      //utilised the fact that printf family returns amount of chars written, saves a call to strlen
-      if(parse_first_line(&req, redirected_buffer) == 0)
-        write(unsec_fd, redirected_buffer, snprintf(redirected_buffer, 1023, "HTTP/1.1 301 Moved Permanently\r\nLocation: https://%s%s\r\nConnection: close\r\n", HOST_NAME, req.path));
-
-      fputs(WARNING_PREPEND, stdout);
-      puts(" unsecured connection dealt with");
+      send_plaintext_301(unsec_fd);
       close(unsec_fd);
       continue;
     }

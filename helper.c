@@ -12,9 +12,11 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include "config.h"
 #include "prot.h"
 #include "helper.h"
 
+//helper function that turns an SSL error code into text. I could use built-in SSL error functions but its so complex and requires like 7 different function calls. This is good enough.
 void print_SSL_accept_err(int SSL_err){
   switch(SSL_err){
   case SSL_ERROR_ZERO_RETURN:
@@ -35,6 +37,8 @@ void print_SSL_accept_err(int SSL_err){
   }
 }
 
+//takes a file path and returns a substring with its file type (ie. the characters after the last '.')
+//NON-DESTRUCTIVE
 char *get_file_type(char* path){
   if(path == NULL)
     return (char *)-1;
@@ -45,6 +49,7 @@ char *get_file_type(char* path){
   return end+1;
 }
 
+//opens a bound listening connection on port port. sockfd is the address of the callers socket, returns 0 for no error
 int open_connection(int *sockfd, int port){
   struct sockaddr_in host_addr;
   //init socket
@@ -81,6 +86,7 @@ void free_http_request(http_request *req){
     free(req->path);
 }
 
+//parses the first line of a http request (ie. HTTP/1.1 GET /)
 int parse_first_line(http_request *req, char* first_line){
   //method
   char *line_token = strtok(first_line, " ");
@@ -96,6 +102,7 @@ int parse_first_line(http_request *req, char* first_line){
   return 0;
 }
 
+//parses the whole http request
 int parse_http_request(http_request *req, char* data){
   size_t data_len = strlen(data);
   char *token = strtok(data, "\r\n");
@@ -145,4 +152,17 @@ char *open_file(char *path){
   char *retval = mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
   close(filefd);
   return retval;
+}
+
+//this function does one thing and one thing alone. sends unencrypted 301 redirecting to the secured port.
+void send_plaintext_301(int sockfd){
+  http_request req;
+  char redirected_buffer[1024];
+  redirected_buffer[read(sockfd, redirected_buffer, 1023)] = 0;
+  //lowkey an abomination
+  //utilised the fact that printf family returns amount of chars written, saves a call to strlen
+  if(parse_first_line(&req, redirected_buffer) == 0)
+    write(sockfd, redirected_buffer, snprintf(redirected_buffer, 1023, "HTTP/1.1 301 Moved Permanently\r\nLocation: https://%s%s\r\nConnection: close\r\n", HOST_NAME, req.path));
+  fputs(WARNING_PREPEND, stdout);
+  puts(" unsecured connection dealt with");
 }
