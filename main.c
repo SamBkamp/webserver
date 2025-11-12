@@ -165,7 +165,6 @@ int load_default_files(){
   files.internal_server_error = internal_server_error;
   return 0;
 }
-
 int main(){
   int ssl_sockfd, unsecured_sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
@@ -179,6 +178,9 @@ int main(){
     .next = NULL
   };
   ll_node *tail = &head;
+
+  //ignore sigpipe errors. They still need to be handled locally but at least this will stop the program from crashing
+  signal(SIGPIPE, SIG_IGN);
 
   files.loaded_files = malloc(sizeof(loaded_file)*MAX_OPEN_FILES);
   for(size_t i = 0; i < MAX_OPEN_FILES; i++){
