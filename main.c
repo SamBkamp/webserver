@@ -228,7 +228,7 @@ int main(){
         write(unsec_fd, redirected_buffer, snprintf(redirected_buffer, 1023, "HTTP/1.1 301 Moved Permanently\r\nLocation: https://%s%s\r\nConnection: close\r\n", HOST_NAME, req.path));
 
       fputs(WARNING_PREPEND, stdout);
-      puts(" unsecured connection dealth with");
+      puts(" unsecured connection dealt with");
       close(unsec_fd);
       continue;
     }
