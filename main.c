@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <signal.h>
 
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
@@ -102,6 +103,7 @@ int send_http_response(SSL *cSSL, http_response *res){
 
   if(cSSL != NULL)
     return SSL_write(cSSL, buffer, strlen(buffer));
+  return -1;
 }
 
 //takes a request struct and sends back appropriate data to client
