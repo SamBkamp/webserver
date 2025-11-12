@@ -193,7 +193,9 @@ int main(){
   SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE); //using single diffie helman, I guess?
   int use_cert = SSL_CTX_use_certificate_file(sslctx, CERTIFICATE_FILE, SSL_FILETYPE_PEM);
   int use_prv_key = SSL_CTX_use_PrivateKey_file(sslctx, PRIVATE_KEY_FILE, SSL_FILETYPE_PEM);
-
+  #ifdef FULLCHAIN_FILE
+  int use_chain = SSL_CTX_use_certificate_chain_file(sslctx, FULLCHAIN_FILE);
+  #endif
   //opens socket, binds to address and sets socket to listening
   if(open_connection(&ssl_sockfd, HTTPS_PORT) != 0){
     perror("open_connection SSL");
