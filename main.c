@@ -68,6 +68,7 @@ char *get_file_data(char* path){
   if(i < MAX_OPEN_FILES && file->file_path != NULL)
     return file->data;
 
+
   //cache miss
   char *file_data = open_file(path);
   loaded_file *new_load;
@@ -75,9 +76,12 @@ char *get_file_data(char* path){
   if(file->file_path == NULL)
     new_load = file;
   else//no space to allocate (allocate to first)
-    new_load = files.loaded_files;
+    new_load = &files.loaded_files[0];
 
-  new_load->file_path = path;
+
+  //can I store file name data in mmap region? ie say the file is only 3kb large, I still have another 1kb of unused page. Can I store metadata there?
+  new_load->file_path = malloc(strlen(path)+1);
+  strcpy(new_load->file_path, path);
   new_load->data = file_data;
   return file_data;
 }
@@ -235,7 +239,6 @@ int main(){
     ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       int ssl_err;
-      char ip_string[16];
       ll_node *node = malloc(sizeof(ll_node));
       node->fd = accept(ssl_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
       node->cSSL = SSL_new(sslctx);
