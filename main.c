@@ -108,14 +108,14 @@ int send_http_response(SSL *cSSL, http_response *res){
 
 //takes a request struct and sends back appropriate data to client
 //the http workhorse
-int requests_handler(http_request *req, SSL *cSSL){
+int requests_handler(http_request *req, ll_node *conn_details){
   http_response res = {0};
   //check if host is valid
   if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) != 0
      && strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) != 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
     res.response_code = 301;
     res.location = HOST_NAME;
-    send_http_response(cSSL, &res);
+    send_http_response(conn_details->cSSL, &res);
     return 0;
   }
   //open file
@@ -129,7 +129,7 @@ int requests_handler(http_request *req, SSL *cSSL){
     res.body = files.not_found->data;
     res.content_length = strlen(res.body);
     res.content_type = "text/html";
-    send_http_response(cSSL, &res);
+    send_http_response(conn_details->cSSL, &res);
     return 0;
   }
   //todo, do this with something simpler (and faster) than printf family
@@ -140,7 +140,7 @@ int requests_handler(http_request *req, SSL *cSSL){
   res.content_type = content_buffer;
   res.content_length = strlen(file_data);
   res.body = file_data;
-  send_http_response(cSSL, &res);
+  send_http_response(conn_details->cSSL, &res);
   return 0;
 }
 
@@ -257,18 +257,18 @@ int main(){
     }
 
     //service existing connections
-    ll_node *prev_buffer = &head;
-    for(ll_node *buf = head.next; buf != NULL; prev_buffer = buf, buf = buf->next){
+    ll_node *prev_conn = &head;
+    for(ll_node *conn = head.next; conn != NULL; prev_conn = conn, conn = conn->next){
       //poll socket
       int client_poll, bytes_read;
       http_request req = {0};
-      poll_settings.fd = buf->fd;
+      poll_settings.fd = conn->fd;
       client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if((poll_settings.revents & POLLIN) == 0 || client_poll < 0)
         continue;
 
       //read and process data
-      bytes_read = SSL_read(buf->cSSL, buffer, 1023);
+      bytes_read = SSL_read(conn->cSSL, buffer, 1023);
       buffer[bytes_read] = 0;
       if(parse_http_request(&req, buffer) < 0
          || req.path == NULL
@@ -277,15 +277,15 @@ int main(){
       }else{
         //create and send http response
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
-        requests_handler(&req, buf->cSSL);
+        requests_handler(&req, conn);
       }
       //close connection and remove from LL
-      prev_buffer->next = buf->next;
-      if(prev_buffer->next == NULL)
-        tail = prev_buffer; //if buf is tail move tail back too
-      destroy_node(buf);
+      prev_conn->next = conn->next;
+      if(prev_conn->next == NULL)
+        tail = prev_conn; //update tail if needed
+      destroy_node(conn);
       free_http_request(&req);
-      buf = prev_buffer;
+      conn = prev_conn;
       clients_connected--;
       //printf("client disconnected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
