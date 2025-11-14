@@ -228,6 +228,7 @@ int main(){
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       int unsec_fd = accept(unsecured_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+      char IGNORE_ME[1024]; //FUCK YOU FIREFOX
       ll_node connection = {
         .fd = unsec_fd,
         .cSSL = NULL,
@@ -237,6 +238,7 @@ int main(){
         .response_code = 301,
         .location = HOST_NAME
       };
+      read(unsec_fd, IGNORE_ME, 1023);
       ssize_t b = send_http_response(&connection, &res);
       if(b < 0)
         perror("write");
