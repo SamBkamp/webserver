@@ -228,7 +228,11 @@ int main(){
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       int unsec_fd = accept(unsecured_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      char IGNORE_ME[1024]; //FUCK YOU FIREFOX
+      char incoming_data[1024];
+      http_request req;
+      read(unsec_fd, incoming_data, 1023);
+      parse_first_line(&req, incoming_data);
+      snprintf(incoming_data, 1024, "%s/%s", HOST_NAME, req.path);
       ll_node connection = {
         .fd = unsec_fd,
         .cSSL = NULL,
@@ -236,11 +240,9 @@ int main(){
       };
       http_response res = {
         .response_code = 301,
-        .location = HOST_NAME
+        .location = incoming_data
       };
-      read(unsec_fd, IGNORE_ME, 1023);
-      ssize_t b = send_http_response(&connection, &res);
-      if(b < 0)
+      if(send_http_response(&connection, &res) < 0)
         perror("write");
       fputs(WARNING_PREPEND, stdout);
       puts(" unsecured connection dealt with");
