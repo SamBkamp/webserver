@@ -88,22 +88,24 @@ char *get_file_data(char* path){
   return file_data;
 }
 
-int send_http_response(SSL *cSSL, http_response *res){
+int send_http_response(ll_node* connection, http_response *res){
   char buffer[1024];
+  size_t bytes_written;
   //response category (ie. first digit of response code)
   int response_cat = res->response_code - (res->response_code % 100);
   switch (response_cat){
   case 300:
-    sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location);
+    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\nConnection: close\r\n\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location);
     break;
   default:
-    sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, res->body);
+    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, res->body);
     break;
   }
 
-  if(cSSL != NULL)
-    return SSL_write(cSSL, buffer, strlen(buffer));
-  return -1;
+  if(connection->cSSL != NULL)
+    return SSL_write(connection->cSSL, buffer, bytes_written);
+  else
+    return write(connection->fd, buffer, bytes_written);
 }
 
 //takes a request struct and sends back appropriate data to client
@@ -115,7 +117,7 @@ int requests_handler(http_request *req, ll_node *conn_details){
      && strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) != 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
     res.response_code = 301;
     res.location = HOST_NAME;
-    send_http_response(conn_details->cSSL, &res);
+    send_http_response(conn_details, &res);
     return 0;
   }
   //open file
@@ -129,7 +131,7 @@ int requests_handler(http_request *req, ll_node *conn_details){
     res.body = files.not_found->data;
     res.content_length = strlen(res.body);
     res.content_type = "text/html";
-    send_http_response(conn_details->cSSL, &res);
+    send_http_response(conn_details, &res);
     return 0;
   }
   //todo, do this with something simpler (and faster) than printf family
@@ -140,7 +142,7 @@ int requests_handler(http_request *req, ll_node *conn_details){
   res.content_type = content_buffer;
   res.content_length = strlen(file_data);
   res.body = file_data;
-  send_http_response(conn_details->cSSL, &res);
+  send_http_response(conn_details, &res);
   return 0;
 }
 
@@ -226,7 +228,20 @@ int main(){
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
       int unsec_fd = accept(unsecured_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      send_plaintext_301(unsec_fd);
+      ll_node connection = {
+        .fd = unsec_fd,
+        .cSSL = NULL,
+        .next = NULL
+      };
+      http_response res = {
+        .response_code = 301,
+        .location = HOST_NAME
+      };
+      ssize_t b = send_http_response(&connection, &res);
+      if(b < 0)
+        perror("write");
+      fputs(WARNING_PREPEND, stdout);
+      puts(" unsecured connection dealt with");
       close(unsec_fd);
       continue;
     }
@@ -253,7 +268,6 @@ int main(){
       tail->next = node;
       tail = node;
       clients_connected++;
-      //printf("client %s connected! [%d/%d]\n", long_to_ip(ip_string, peer_addr.sin_addr.s_addr), clients_connected, CLIENTS_MAX);
     }
 
     //service existing connections

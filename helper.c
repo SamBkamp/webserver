@@ -154,15 +154,3 @@ char *open_file(char *path){
   return retval;
 }
 
-//this function does one thing and one thing alone. sends unencrypted 301 redirecting to the secured port.
-void send_plaintext_301(int sockfd){
-  http_request req;
-  char redirected_buffer[1024];
-  redirected_buffer[read(sockfd, redirected_buffer, 1023)] = 0;
-  //lowkey an abomination
-  //utilised the fact that printf family returns amount of chars written, saves a call to strlen
-  if(parse_first_line(&req, redirected_buffer) == 0)
-    write(sockfd, redirected_buffer, snprintf(redirected_buffer, 1023, "HTTP/1.1 301 Moved Permanently\r\nLocation: https://%s%s\r\nConnection: close\r\n", HOST_NAME, req.path));
-  fputs(WARNING_PREPEND, stdout);
-  puts(" unsecured connection dealt with");
-}
