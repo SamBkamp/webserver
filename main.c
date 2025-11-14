@@ -232,7 +232,7 @@ int main(){
       http_request req;
       read(unsec_fd, incoming_data, 1023);
       parse_first_line(&req, incoming_data);
-      snprintf(incoming_data, 1024, "%s/%s", HOST_NAME, req.path);
+      snprintf(incoming_data, 1024, "%s%s", HOST_NAME, req.path);
       ll_node connection = {
         .fd = unsec_fd,
         .cSSL = NULL,
