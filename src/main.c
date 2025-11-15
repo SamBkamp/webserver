@@ -166,43 +166,45 @@ int main(){
     //check for unsecured connections (on HTTP_PORT)
     poll_settings.fd = unsecured_sockfd;
     check_unsec_connection(&poll_settings, &peer_addr);
-    if(clients_connected >= CLIENTS_MAX)
-      continue;
-    //check for new connections
-    poll_settings.fd = ssl_sockfd;
-    ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
-    if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
-      int ssl_err;
-      ll_node *node = malloc(sizeof(ll_node));
-      node->fd = accept(ssl_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      node->cSSL = SSL_new(sslctx);
-      SSL_set_fd(node->cSSL, node->fd);
-      ssl_err = SSL_accept(node->cSSL);
-      if(ssl_err <= 0){
-        //i HATE openssl error handling
-        fputs(SSL_ERROR_PREPEND, stdout);
-        print_SSL_accept_err(SSL_get_error(node->cSSL, ssl_err));
-        destroy_node(node);
-        continue;
+
+    if(clients_connected < CLIENTS_MAX){
+      //check for new connections
+      poll_settings.fd = ssl_sockfd;
+      ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
+      if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
+        int ssl_err;
+        ll_node *node = malloc(sizeof(ll_node));
+        node->fd = accept(ssl_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
+        node->cSSL = SSL_new(sslctx);
+        SSL_set_fd(node->cSSL, node->fd);
+        ssl_err = SSL_accept(node->cSSL);
+        if(ssl_err <= 0){
+          //i HATE openssl error handling
+          fputs(SSL_ERROR_PREPEND, stdout);
+          print_SSL_accept_err(SSL_get_error(node->cSSL, ssl_err));
+          destroy_node(node);
+          continue;
+        }
+        node->next = NULL;
+        tail->next = node;
+        tail = node;
+        clients_connected++;
       }
-      node->next = NULL;
-      tail->next = node;
-      tail = node;
-      clients_connected++;
     }
 
     //service existing connections
     ll_node *prev_conn = &head;
     for(ll_node *conn = head.next; conn != NULL; prev_conn = conn, conn = conn->next){
-      //poll socket
       int client_poll, bytes_read;
       http_request req = {0};
       poll_settings.fd = conn->fd;
+
+      //poll socket
       client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
       if((poll_settings.revents & POLLIN) == 0 || client_poll < 0)
         continue;
 
-      //read and process data
+      //read and parse data
       bytes_read = SSL_read(conn->cSSL, buffer, 1023);
       buffer[bytes_read] = 0;
       if(parse_http_request(&req, buffer) < 0
@@ -210,7 +212,7 @@ int main(){
          || req.host == NULL){
         printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, buffer);
       }else{
-        //create and send http response
+        //pass parsed data to the requests handler
         printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
         requests_handler(&req, conn);
       }
@@ -222,7 +224,6 @@ int main(){
       free_http_request(&req);
       conn = prev_conn;
       clients_connected--;
-      //printf("client disconnected! [%d/%d]\n", clients_connected, CLIENTS_MAX);
     }
   }
   SSL_CTX_free(sslctx);
