@@ -14,7 +14,7 @@
 
 #include "config.h"
 #include "prot.h"
-#include "helper.h"
+#include "string_manipulation.h"
 
 //helper function that turns an SSL error code into text. I could use built-in SSL error functions but its so complex and requires like 7 different function calls. This is good enough.
 void print_SSL_accept_err(int SSL_err){

@@ -9,6 +9,9 @@
 #define METHOD_GET 1
 #define METHOD_POST 2
 
+#define CONNECTION_CLOSE 0
+#define CONNECTION_KEEP_ALIVE 1
+
 #define SSL_ERROR_PREPEND "\x1B[1;31m[SSL_ERROR]\x1B[0m"
 #define ERROR_PREPEND "\x1B[1;31m[ERROR]\x1B[0m"
 #define WARNING_PREPEND "\x1B[1;33m[WARN]\x1B[0m"
@@ -23,7 +26,7 @@ typedef struct ll_node{
 typedef struct{
   char method[10];
   char *path;
-  char *connection;
+  char* connection;
   char *host;
 }http_request;
 
@@ -33,6 +36,7 @@ typedef struct{
   size_t content_length;
   char *location;
   char *body;
+  uint8_t connection;
 }http_response;
 
 typedef struct{

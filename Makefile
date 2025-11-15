@@ -3,7 +3,7 @@ LIBS := -lcrypto -lssl
 
 .PHONY: all
 
-pws:main.c helper.c
+pws:src/main.c src/string_manipulation.c
 	cc $^ ${FLAGS} -o $@ ${LIBS}
 
 all: pws

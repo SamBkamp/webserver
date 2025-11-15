@@ -15,12 +15,14 @@
 
 #include "config.h"
 #include "prot.h"
-#include "helper.h"
+#include "string_manipulation.h"
 
 //I reckon this implementation might be temporary
 #define MAX_OPEN_FILES 20
 
 root_file_data files;
+
+char *connection_types[] = {"close", "keep-alive"};
 
 //not all implemented (obviously)
 char *one_hundreds[] = {"Continue", "Switching Protocols"};
@@ -95,10 +97,10 @@ int send_http_response(ll_node* connection, http_response *res){
   int response_cat = res->response_code - (res->response_code % 100);
   switch (response_cat){
   case 300:
-    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\nConnection: close\r\n\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location);
+    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\nConnection: %s\r\n\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location, connection_types[res->connection]);
     break;
   default:
-    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: close\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, res->body);
+    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: %s\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, connection_types[res->connection], res->body);
     break;
   }
 
@@ -117,6 +119,7 @@ int requests_handler(http_request *req, ll_node *conn_details){
      && strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) != 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
     res.response_code = 301;
     res.location = HOST_NAME;
+    res.connection = CONNECTION_CLOSE;
     send_http_response(conn_details, &res);
     return 0;
   }
@@ -131,6 +134,7 @@ int requests_handler(http_request *req, ll_node *conn_details){
     res.body = files.not_found->data;
     res.content_length = strlen(res.body);
     res.content_type = "text/html";
+    res.connection = CONNECTION_CLOSE;
     send_http_response(conn_details, &res);
     return 0;
   }
@@ -142,6 +146,7 @@ int requests_handler(http_request *req, ll_node *conn_details){
   res.content_type = content_buffer;
   res.content_length = strlen(file_data);
   res.body = file_data;
+  res.connection = CONNECTION_CLOSE;
   send_http_response(conn_details, &res);
   return 0;
 }
@@ -223,7 +228,7 @@ int main(){
   printf("unsecured port opened on %d\n", HTTP_PORT);
 
   while(1){
-    //check for unsecured connections (on port 80)
+    //check for unsecured connections (on HTTP_PORT)
     poll_settings.fd = unsecured_sockfd;
     int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
     if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
