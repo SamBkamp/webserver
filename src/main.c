@@ -33,31 +33,6 @@ char *four_hundreds[] = {"Bad Request", "Unauthorized", "Payment Required", "For
 char *five_hundreds[] = {"Internal Server Error", "Not Implemented", "Bad Gateway"};
 char **msd[] = {one_hundreds, two_hundreds, three_hundreds, four_hundreds, five_hundreds};
 
-
-//retpath should be strlen(document_root) + strlen(path) + 20
-char *format_dirs(char *path, char *ret_path){
-  char append[20], *offset;
-  int dots;
-  if(path[strlen(path)-1] == '/')
-    sprintf(append, "index.html");
-  else
-    *append = 0;
-  sprintf(ret_path,"%s%s%s", DOCUMENT_ROOT, path, append);
-
-  dots = 0;
-  offset = ret_path;
-  while(*offset != 0){
-    if(*offset == '.')
-      dots++;
-    else if(*offset == '/' && dots > 1){
-      *ret_path = (char)-1;
-      break;
-    }else
-      dots = 0;
-    offset++;
-  }
-  return ret_path;
-}
 //file handler: handles file loading and caching. Simply returns file contents. Lazy loads into the cache
 char *get_file_data(char* path){
   loaded_file *file = files.loaded_files;
@@ -159,22 +134,6 @@ void destroy_node(ll_node *node){
   free(node);
 }
 
-int load_default_files(){
-  loaded_file *not_found_file, *internal_server_error;
-
-  not_found_file = malloc(sizeof(loaded_file));
-  not_found_file->file_path = malloc(strlen("default/not_found.html"));
-  strcpy(not_found_file->file_path, "default/not_found.html");
-  not_found_file->data = open_file(not_found_file->file_path);
-  files.not_found = not_found_file;
-
-  internal_server_error = malloc(sizeof(loaded_file));
-  internal_server_error->file_path = malloc(strlen("default/internal_server_error.html"));
-  strcpy(internal_server_error->file_path, "default/internal_server_error.html");
-  internal_server_error->data = open_file(internal_server_error->file_path);
-  files.internal_server_error = internal_server_error;
-  return 0;
-}
 int main(){
   int ssl_sockfd, unsecured_sockfd, clients_connected = 0;
   struct sockaddr_in peer_addr;
@@ -198,9 +157,11 @@ int main(){
     files.loaded_files[i].data = NULL;
   }
 
-  //load default files into memory
-  //todo: add error checking and maybe also passing files by ref
-  load_default_files();
+  //load default files into memory. Doesn't abort - should it?
+  if(load_default_files(&files) == -1){
+    fputs(WARNING_PREPEND, stderr);
+    perror(" Couldn't load 404/500 error files");
+  }
 
   //load openSSL nonsense (algos and strings)
   OpenSSL_add_all_algorithms();  //surely this can be changed to load just the ones we want?

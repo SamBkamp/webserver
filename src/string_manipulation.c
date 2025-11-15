@@ -16,6 +16,35 @@
 #include "prot.h"
 #include "string_manipulation.h"
 
+//function that sanitises and turns the http path into a file path on the system
+//retpath should be strlen(document_root) + strlen(path) + 20
+char *format_dirs(char *path, char *ret_path){
+  char append[20], *offset;
+  int dots;
+  //append index.html to the path if the path ends in a '/'
+  if(path[strlen(path)-1] == '/')
+    sprintf(append, "index.html");
+  else
+    *append = 0;
+  //combine document_root + path + optional append
+  sprintf(ret_path,"%s%s%s", DOCUMENT_ROOT, path, append);
+
+  //check if path is valid (doesn't contain ../ in it)
+  dots = 0;
+  offset = ret_path;
+  while(*offset != 0){
+    if(*offset == '.')
+      dots++;
+    else if(*offset == '/' && dots > 1){ // <- invalid condition, return error
+      *ret_path = (char)-1;
+      break;
+    }else
+      dots = 0;
+    offset++;
+  }
+  return ret_path;
+}
+
 //helper function that turns an SSL error code into text. I could use built-in SSL error functions but its so complex and requires like 7 different function calls. This is good enough.
 void print_SSL_accept_err(int SSL_err){
   switch(SSL_err){
@@ -51,6 +80,7 @@ char *get_file_type(char* path){
 
 //http parsing stuff
 
+//TODO: remove the need for this
 void free_http_request(http_request *req){
   if(req->host != NULL)
     free(req->host);
@@ -120,9 +150,31 @@ char* long_to_ip(char* out, unsigned long IP){
 char *open_file(char *path){
   int filefd = open(path, O_RDONLY);
   if(filefd < 0)
-    return (char *)-1;
+    return MAP_FAILED;
   char *retval = mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
   close(filefd);
   return retval;
 }
 
+
+// init function that loads the 404 and 500 error message file into the root file struct
+int load_default_files(root_file_data *root_file_st){
+  loaded_file *not_found_file, *internal_server_error;
+
+  not_found_file = malloc(sizeof(loaded_file));
+  not_found_file->file_path = malloc(strlen("default/not_found.html"));
+  strcpy(not_found_file->file_path, "default/not_found.html");
+  not_found_file->data = open_file(not_found_file->file_path);
+  root_file_st->not_found = not_found_file;
+
+  internal_server_error = malloc(sizeof(loaded_file));
+  internal_server_error->file_path = malloc(strlen("default/internal_server_error.html"));
+  strcpy(internal_server_error->file_path, "default/internal_server_error.html");
+  internal_server_error->data = open_file(internal_server_error->file_path);
+  root_file_st->internal_server_error = internal_server_error;
+
+  if(internal_server_error->data == MAP_FAILED
+     || not_found_file->data == MAP_FAILED)
+    return -1;
+  return 0;
+}
