@@ -1,5 +1,6 @@
 #ifndef MAIN_PROT
 #define MAIN_PROT
+#include <openssl/ssl.h>
 
 #define HTTP_PORT 80
 #define HTTPS_PORT 443
