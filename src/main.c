@@ -23,16 +23,6 @@
 
 root_file_data files;
 
-char *connection_types[] = {"close", "keep-alive"};
-
-//not all implemented (obviously)
-char *one_hundreds[] = {"Continue", "Switching Protocols"};
-char *two_hundreds[] = {"OK", "Created", "Accepted", 0, "No Content"};
-char *three_hundreds[] = {0, "Moved Permanently", "Found", "See Other"};
-char *four_hundreds[] = {"Bad Request", "Unauthorized", "Payment Required", "Forbidden", "Not Found"};
-char *five_hundreds[] = {"Internal Server Error", "Not Implemented", "Bad Gateway"};
-char **msd[] = {one_hundreds, two_hundreds, three_hundreds, four_hundreds, five_hundreds};
-
 //file handler: handles file loading and caching. Simply returns file contents. Lazy loads into the cache
 char *get_file_data(char* path){
   loaded_file *file = files.loaded_files;
@@ -64,26 +54,6 @@ char *get_file_data(char* path){
   strcpy(new_load->file_path, path);
   new_load->data = file_data;
   return file_data;
-}
-
-int send_http_response(ll_node* connection, http_response *res){
-  char buffer[1024];
-  size_t bytes_written;
-  //response category (ie. first digit of response code)
-  int response_cat = res->response_code - (res->response_code % 100);
-  switch (response_cat){
-  case 300:
-    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\nConnection: %s\r\n\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location, connection_types[res->connection]);
-    break;
-  default:
-    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: %s\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, connection_types[res->connection], res->body);
-    break;
-  }
-
-  if(connection->cSSL != NULL)
-    return SSL_write(connection->cSSL, buffer, bytes_written);
-  else
-    return write(connection->fd, buffer, bytes_written);
 }
 
 //takes a request struct and sends back appropriate data to client
@@ -176,6 +146,7 @@ int main(){
   #ifdef FULLCHAIN_FILE
   int use_chain = SSL_CTX_use_certificate_chain_file(sslctx, FULLCHAIN_FILE);
   #endif
+
   //opens socket, binds to address and sets socket to listening
   if(open_connection(&ssl_sockfd, HTTPS_PORT) != 0){
     perror("open_connection SSL");
@@ -189,33 +160,12 @@ int main(){
   }
   printf("unsecured port opened on %d\n", HTTP_PORT);
 
+  //main event loop
   while(1){
+    int ret_poll;
     //check for unsecured connections (on HTTP_PORT)
     poll_settings.fd = unsecured_sockfd;
-    int ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
-    if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
-      int unsec_fd = accept(unsecured_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-      char incoming_data[1024];
-      http_request req;
-      read(unsec_fd, incoming_data, 1023);
-      parse_first_line(&req, incoming_data);
-      snprintf(incoming_data, 1024, "%s%s", HOST_NAME, req.path);
-      ll_node connection = {
-        .fd = unsec_fd,
-        .cSSL = NULL,
-        .next = NULL
-      };
-      http_response res = {
-        .response_code = 301,
-        .location = incoming_data
-      };
-      if(send_http_response(&connection, &res) < 0)
-        perror("write");
-      fputs(WARNING_PREPEND, stdout);
-      puts(" unsecured connection dealt with");
-      close(unsec_fd);
-      continue;
-    }
+    check_unsec_connection(&poll_settings, &peer_addr);
     if(clients_connected >= CLIENTS_MAX)
       continue;
     //check for new connections
