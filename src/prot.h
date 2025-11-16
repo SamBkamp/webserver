@@ -27,7 +27,7 @@ typedef struct ll_node{
 typedef struct{
   char method[10];
   char *path;
-  char* connection;
+  uint8_t connection;
   char *host;
 }http_request;
 

@@ -126,10 +126,14 @@ int parse_http_request(http_request *req, char* data){
   token = strtok(token+token_length+2, "\r\n");
   //this weird token+strlen math is to go to the next token of the original call to strtok in this function. parse_first_line makes a call to strtok on the substring passed to it and erasing its data of the first call, so we artificially add it back by passing the (untouched) rest of the string data.
   while(token != NULL){
-    //printf("%s\n", token);
     if(strncmp(token, "Host", 4)==0){
       req->host = malloc(strlen((token+6))+1);
       strcpy(req->host, (token+6));
+    }else if(strncmp(token, "Connection", 10)==0){
+      if(strncmp(token+12, "keep-alive", 10)==0)
+        req->connection = CONNECTION_KEEP_ALIVE;
+      else
+        req->connection = CONNECTION_CLOSE;
     }
     token = strtok(NULL, "\r\n");
   }

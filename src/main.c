@@ -213,9 +213,10 @@ int main(){
         printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, buffer);
       }else{
         //pass parsed data to the requests handler
-        printf("method: %s | path: %s | host: %s\n", req.method, req.path, req.host);
+        printf("method: %s | path: %s | host: %s | connection: %s\n", req.method, req.path, req.host, connection_types[req.connection]);
         requests_handler(&req, conn);
       }
+
       //close connection and remove from LL
       prev_conn->next = conn->next;
       if(prev_conn->next == NULL)
