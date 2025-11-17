@@ -18,6 +18,8 @@
 #define WARNING_PREPEND "\x1B[1;33m[WARN]\x1B[0m"
 
 typedef struct ll_node{
+  struct sockaddr_in *peer_addr;
+  socklen_t peer_size;
   int fd;
   SSL *cSSL;
   struct ll_node *next;

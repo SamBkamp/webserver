@@ -96,17 +96,9 @@ int requests_handler(http_request *req, ll_node *conn_details){
   return 0;
 }
 
-void destroy_node(ll_node *node){
-  SSL_shutdown(node->cSSL);
-  SSL_free(node->cSSL);
-  close(node->fd);
-  free(node);
-}
 
 int main(){
   int ssl_sockfd, unsecured_sockfd, clients_connected = 0;
-  struct sockaddr_in peer_addr;
-  socklen_t peer_size = sizeof(struct sockaddr_in);
   char buffer[1024];
   struct pollfd poll_settings = {   //default poll settings, just add your fd
     .events = POLLIN | POLLOUT
@@ -161,35 +153,15 @@ int main(){
 
   //main event loop
   while(1){
-    int ret_poll;
     //check for unsecured connections (on HTTP_PORT)
     poll_settings.fd = unsecured_sockfd;
-    check_unsec_connection(&poll_settings, &peer_addr);
+    check_unsec_connection(&poll_settings);
 
     if(clients_connected < CLIENTS_MAX){
       //check for new connections
-      poll_settings.fd = ssl_sockfd;
-      ret_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
-      if((poll_settings.revents & POLLIN) > 0 && ret_poll >= 0){
-        int ssl_err;
-        ll_node *node = malloc(sizeof(ll_node));
-        node->fd = accept(ssl_sockfd, (struct sockaddr*)&peer_addr, &peer_size);
-        node->cSSL = SSL_new(sslctx);
-        SSL_set_fd(node->cSSL, node->fd);
-        ssl_err = SSL_accept(node->cSSL);
-        if(ssl_err <= 0){
-          //i HATE openssl error handling
-          fputs(SSL_ERROR_PREPEND, stdout);
-          print_SSL_accept_err(SSL_get_error(node->cSSL, ssl_err));
-          destroy_node(node);
-          continue;
-        }
-        node->next = NULL;
-        tail->next = node;
-        tail = node;
-        clients_connected++;
-      }
+      clients_connected += new_ssl_connections(&poll_settings, tail, sslctx, ssl_sockfd);    
     }
+    
 
     //service existing connections
     ll_node *prev_conn = &head;
