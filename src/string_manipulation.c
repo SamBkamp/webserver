@@ -86,6 +86,8 @@ void free_http_request(http_request *req){
     free(req->host);
   if(req->path != NULL)
     free(req->path);
+  if(req->connection != NULL)
+    free(req->connection);
 }
 
 //parses the first line of a http request (ie. HTTP/1.1 GET /)

@@ -27,6 +27,7 @@ root_file_data files;
 char *get_file_data(char* path){
   loaded_file *file = files.loaded_files;
   size_t i = 0;
+  //todo: derive i from file so you only need to increment one var
   while(i < MAX_OPEN_FILES
         && file->file_path != NULL
         && strcmp(file->file_path, path)!=0){
@@ -38,7 +39,6 @@ char *get_file_data(char* path){
   if(i < MAX_OPEN_FILES && file->file_path != NULL)
     return file->data;
 
-
   //cache miss
   char *file_data = open_file(path);
   loaded_file *new_load;
@@ -47,7 +47,6 @@ char *get_file_data(char* path){
     new_load = file;
   else//no space to allocate (allocate to first)
     new_load = &files.loaded_files[0];
-
 
   //can I store file name data in mmap region? ie say the file is only 3kb large, I still have another 1kb of unused page. Can I store metadata there?
   new_load->file_path = malloc(strlen(path)+1);
