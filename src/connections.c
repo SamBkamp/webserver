@@ -63,8 +63,7 @@ int open_connection(int *sockfd, int port){
 void check_unsec_connection(struct pollfd *poll_settings){
   struct sockaddr_in peer;
   socklen_t peer_size = sizeof(peer);
-  int ret_poll = poll(poll_settings, 1, POLL_TIMEOUT);
-  if((poll_settings->revents & POLLIN) > 0 && ret_poll >= 0){
+  if((poll_settings->revents & POLLIN) > 0){
     int unsec_fd = accept(poll_settings->fd, (struct sockaddr*)&peer, &peer_size);
     char incoming_data[1024];
     http_request req = {0};
@@ -117,10 +116,8 @@ int send_http_response(ll_node* connection, http_response *res){
 
 //handler function to accept new SSL connections and append them to the Lnked List
 //returns 1 for new connection 0 for no new connection (so you can add it to a total)
-int new_ssl_connections(struct pollfd *poll_settings, ll_node *tail, SSL_CTX *sslctx, int ssl_sockfd){
-  poll_settings->fd = ssl_sockfd;
-  int ret_poll = poll(poll_settings, 1, POLL_TIMEOUT);
-  if((poll_settings->revents & POLLIN) > 0 && ret_poll >= 0){
+ll_node* new_ssl_connections(struct pollfd *poll_settings, ll_node *tail, SSL_CTX *sslctx, int ssl_sockfd){
+  if((poll_settings->revents & POLLIN) > 0){
     int ssl_err;
     ll_node *node = malloc(sizeof(ll_node));
     node->peer_addr = malloc(sizeof(struct sockaddr_in));
@@ -128,7 +125,7 @@ int new_ssl_connections(struct pollfd *poll_settings, ll_node *tail, SSL_CTX *ss
     node->fd = accept(ssl_sockfd, (struct sockaddr*)node->peer_addr, &node->peer_size);
     if(node->fd < 0){
       perror("accept");
-      return 0;
+      return NULL;
     }
     node->cSSL = SSL_new(sslctx);
     SSL_set_fd(node->cSSL, node->fd);
@@ -138,14 +135,13 @@ int new_ssl_connections(struct pollfd *poll_settings, ll_node *tail, SSL_CTX *ss
       fputs(SSL_ERROR_PREPEND, stdout);
       print_SSL_accept_err(SSL_get_error(node->cSSL, ssl_err));
       destroy_node(node);
-      return 0;
+      return NULL;
     }
     node->requests = 0;
     node->conn_opened = time(NULL);
     node->next = NULL;
     tail->next = node;
-    tail = node;
-    return 1;
+    return tail->next;
   }
-  return 0;
+  return NULL;
 }

@@ -103,6 +103,7 @@ ssize_t requests_handler(http_request *req, http_response *res, ll_node *conn_de
 
 int main(){
   int ssl_sockfd, unsecured_sockfd, clients_connected = 0;
+  struct pollfd listener_sockets[2];
   struct pollfd poll_settings = {   //default poll settings, just add your fd
     .events = POLLIN | POLLOUT
   };
@@ -154,18 +155,27 @@ int main(){
   }
   printf("unsecured port opened on %d\n", HTTP_PORT);
 
+  listener_sockets[0] = (struct pollfd){
+    .fd = unsecured_sockfd,
+    .events = POLLIN | POLLOUT
+  };
+  listener_sockets[1] = (struct pollfd){
+    .fd = ssl_sockfd,
+    .events = POLLIN | POLLOUT
+  };
   //main event loop
   while(1){
+    int ret_poll = poll(listener_sockets, 2, POLL_TIMEOUT);
     //check for unsecured connections (on HTTP_PORT)
-    poll_settings.fd = unsecured_sockfd;
-    check_unsec_connection(&poll_settings);
+
+    check_unsec_connection(&listener_sockets[0]);
 
     if(clients_connected < CLIENTS_MAX){
       //check for new connections
-      int new_conn = new_ssl_connections(&poll_settings, tail, sslctx, ssl_sockfd);
-      if(new_conn > 0){
-        clients_connected += new_conn;
-        printf("new connection. clients: %d\n", clients_connected);
+      ll_node *new_conn = new_ssl_connections(&listener_sockets[1], tail, sslctx, ssl_sockfd);
+      if(new_conn != NULL){
+        tail = new_conn;
+        printf("new connection [%ld]. clients: %d\n", tail->conn_opened, ++clients_connected);
       }
     }
 
@@ -199,7 +209,7 @@ int main(){
         if(parse_http_request(&req, buffer) < 0
            || req.path == NULL
            || req.host == NULL){
-          printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, other_buffer);
+          printf("%s malformed query sent\n length: %d request: %s\n", WARNING_PREPEND, bytes_read, other_buffer);
           keep_alive_flag = 0;
         }else{
           //pass parsed data to the requests handler
@@ -209,10 +219,10 @@ int main(){
         }
       }
 
-      time_t current_time = time(NULL) - conn->conn_opened;
-      if(current_time < KEEP_ALIVE_TIMEOUT && keep_alive_flag > 0)
+      if(((time(NULL) - conn->conn_opened) < KEEP_ALIVE_TIMEOUT) && keep_alive_flag > 0)
         continue;
       //close connection and remove from LL
+      printf("closing connection [%ld] ", conn->conn_opened);
       prev_conn->next = conn->next;
       if(prev_conn->next == NULL)
         tail = prev_conn; //update tail if needed
@@ -220,7 +230,7 @@ int main(){
       free_http_request(&req);
       conn = prev_conn;
       clients_connected--;
-      printf("closing connection. Clients: %d\n", clients_connected);
+      printf("Clients: %d\n", clients_connected);
     }
   }
   SSL_CTX_free(sslctx);
