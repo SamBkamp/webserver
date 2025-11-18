@@ -187,9 +187,10 @@ int main(){
          || (poll_settings.revents & POLLERR) > 0){
         fputs(WARNING_PREPEND, stdout);
         if((poll_settings.revents & POLLERR)>0)
-          puts("pollerr");
+          puts(" pollerr");
         else
-          puts("pollhup");
+          puts(" pollhup");
+        keep_alive_flag = 0;
       }
       if((poll_settings.revents & POLLIN) > 0 && client_poll >= 0){
         //read and parse data
