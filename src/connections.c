@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <poll.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -66,7 +67,7 @@ void check_unsec_connection(struct pollfd *poll_settings){
   if((poll_settings->revents & POLLIN) > 0 && ret_poll >= 0){
     int unsec_fd = accept(poll_settings->fd, (struct sockaddr*)&peer, &peer_size);
     char incoming_data[1024];
-    http_request req;
+    http_request req = {0};
     read(unsec_fd, incoming_data, 1023);
     parse_first_line(&req, incoming_data);
     snprintf(incoming_data, 1024, "%s%s", HOST_NAME, req.path);
@@ -133,6 +134,8 @@ int new_ssl_connections(struct pollfd *poll_settings, ll_node *tail, SSL_CTX *ss
       destroy_node(node);
       return 0;
     }
+    node->requests = 0;
+    node->conn_opened = time(NULL);
     node->next = NULL;
     tail->next = node;
     tail = node;

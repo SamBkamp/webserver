@@ -3,6 +3,7 @@
 #include <string.h>
 #include <poll.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -57,16 +58,23 @@ char *get_file_data(char* path){
 
 //takes a request struct and sends back appropriate data to client
 //the http workhorse
-int requests_handler(http_request *req, ll_node *conn_details){
-  http_response res = {0};
+// returns 0 if successfully handled valid request
+//returns -1 if connection is to be closed
+ssize_t requests_handler(http_request *req, http_response *res, ll_node *conn_details){
+  if(++conn_details->requests > KEEP_ALIVE_MAX_REQ)
+    res->connection = CONNECTION_CLOSE;
+  else
+    res->connection = req->connection;
+
+  printf("requests: %d\n", conn_details->requests);
   //check if host is valid
   if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) != 0
      && strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) != 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
-    res.response_code = 301;
-    res.location = HOST_NAME;
-    res.connection = CONNECTION_CLOSE;
-    send_http_response(conn_details, &res);
-    return 0;
+    res->response_code = 301;
+    res->location = HOST_NAME;
+    res->connection = CONNECTION_CLOSE;
+    send_http_response(conn_details, res);
+    return -1;
   }
   //open file
   char file_path[sizeof(DOCUMENT_ROOT) + strlen(req->path) + 20];
@@ -75,24 +83,22 @@ int requests_handler(http_request *req, ll_node *conn_details){
 
   //file can't be opened for one reason or another
   if(file_data == (char *)-1 || *file_path == (char)-1){
-    res.response_code = 404;
-    res.body = files.not_found->data;
-    res.content_length = strlen(res.body);
-    res.content_type = "text/html";
-    res.connection = CONNECTION_CLOSE;
-    send_http_response(conn_details, &res);
+    res->response_code = 404;
+    res->body = files.not_found->data;
+    res->content_length = strlen(res->body);
+    res->content_type = "text/html";
+    send_http_response(conn_details, res);
     return 0;
   }
   //todo, do this with something simpler (and faster) than printf family
   char content_buffer[20];
   snprintf(content_buffer, 20, "text/%s", get_file_type(file_path));
   //if file is valid and openable
-  res.response_code = 200;
-  res.content_type = content_buffer;
-  res.content_length = strlen(file_data);
-  res.body = file_data;
-  res.connection = CONNECTION_CLOSE;
-  send_http_response(conn_details, &res);
+  res->response_code = 200;
+  res->content_type = content_buffer;
+  res->content_length = strlen(file_data);
+  res->body = file_data;
+  send_http_response(conn_details, res);
   return 0;
 }
 
@@ -159,36 +165,53 @@ int main(){
 
     if(clients_connected < CLIENTS_MAX){
       //check for new connections
-      clients_connected += new_ssl_connections(&poll_settings, tail, sslctx, ssl_sockfd);    
+      int new_conn = new_ssl_connections(&poll_settings, tail, sslctx, ssl_sockfd);
+      clients_connected += new_conn;
+      if(new_conn > 0)
+        printf("clients: %d\n", clients_connected);
     }
-    
+
 
     //service existing connections
     ll_node *prev_conn = &head;
     for(ll_node *conn = head.next; conn != NULL; prev_conn = conn, conn = conn->next){
       int client_poll, bytes_read;
+      uint8_t keep_alive_flag = 1;
       http_request req = {0};
+      http_response res = {0};
       poll_settings.fd = conn->fd;
 
       //poll socket
       client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
-      if((poll_settings.revents & POLLIN) == 0 || client_poll < 0)
-        continue;
-
-      //read and parse data
-      bytes_read = SSL_read(conn->cSSL, buffer, 1023);
-      buffer[bytes_read] = 0;
-      if(parse_http_request(&req, buffer) < 0
-         || req.path == NULL
-         || req.host == NULL){
-        printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, buffer);
-      }else{
-        //pass parsed data to the requests handler
-        printf("method: %s | path: %s | host: %s | connection: %s\n", req.method, req.path, req.host, connection_types[req.connection]);
-        requests_handler(&req, conn);
+      if((poll_settings.revents & POLLHUP) > 0
+         || (poll_settings.revents & POLLERR) > 0){
+        fputs(WARNING_PREPEND, stdout);
+        if((poll_settings.revents & POLLERR)>0)
+          puts("pollerr");
+        else
+          puts("pollhup");
+      }
+      if((poll_settings.revents & POLLIN) > 0 && client_poll >= 0){
+        //read and parse data
+        bytes_read = SSL_read(conn->cSSL, buffer, 1023);
+        buffer[bytes_read] = 0;
+        if(parse_http_request(&req, buffer) < 0
+           || req.path == NULL
+           || req.host == NULL){
+          printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, buffer);
+        }else{
+          //pass parsed data to the requests handler
+          printf("method: %s | path: %s | host: %s | connection: %s\n", req.method, req.path, req.host, connection_types[req.connection]);
+          requests_handler(&req, &res, conn);
+          keep_alive_flag = req.connection & res.connection;
+        }
       }
 
+      time_t current_time = time(NULL) - conn->conn_opened;
+      if(current_time < KEEP_ALIVE_TIMEOUT && keep_alive_flag > 0)
+        continue;
       //close connection and remove from LL
+      puts("closing connection");
       prev_conn->next = conn->next;
       if(prev_conn->next == NULL)
         tail = prev_conn; //update tail if needed
