@@ -69,7 +69,13 @@ void check_unsec_connection(struct pollfd *poll_settings){
     char incoming_data[1024];
     http_request req = {0};
     read(unsec_fd, incoming_data, 1023);
-    parse_first_line(&req, incoming_data);
+    if(parse_first_line(&req, incoming_data)<0){
+      fputs(ERROR_PREPEND, stderr);
+      fputs(" couldn't parse first line\n", stderr);
+      close(unsec_fd);
+      return;
+    }
+
     snprintf(incoming_data, 1024, "%s%s", HOST_NAME, req.path);
     ll_node connection = {
       .fd = unsec_fd,

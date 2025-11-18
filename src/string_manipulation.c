@@ -89,16 +89,17 @@ void free_http_request(http_request *req){
 }
 
 //parses the first line of a http request (ie. HTTP/1.1 GET /)
+//returns -1 if error
 int parse_first_line(http_request *req, char* first_line){
   //method
   char *line_token = strtok(first_line, " ");
   if(line_token == NULL)
-    return 1;
+    return -1;
   strncpy(req->method, line_token, 10);
   //path
   line_token = strtok(NULL, " ");
   if(line_token == NULL)
-    return 1;
+    return -1;
   req->path = malloc(strlen(line_token)+1); //chars are 1 byte (almost always)
   strcpy(req->path, line_token);
   return 0;
