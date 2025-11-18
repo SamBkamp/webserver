@@ -65,8 +65,6 @@ ssize_t requests_handler(http_request *req, http_response *res, ll_node *conn_de
     res->connection = CONNECTION_CLOSE;
   else
     res->connection = req->connection;
-
-  printf("requests: %d\n", conn_details->requests);
   //check if host is valid
   if(strncmp(req->host, HOST_NAME, HOST_NAME_LEN) != 0
      && strncmp(req->host+4, HOST_NAME, HOST_NAME_LEN) != 0){ //second condition is to check for www. connections (but currently accepts  first 4 chars lol) TODO: fix this
@@ -194,12 +192,15 @@ int main(){
       if((poll_settings.revents & POLLIN) > 0 && client_poll >= 0){
         //read and parse data
         char buffer[2048];
+        char other_buffer[2049];
         bytes_read = SSL_read(conn->cSSL, buffer, 2047);
         buffer[bytes_read] = 0;
+        strcpy(other_buffer, buffer);
         if(parse_http_request(&req, buffer) < 0
            || req.path == NULL
            || req.host == NULL){
-          printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, buffer);
+          printf("%s malformed query sent\nrequest: %s\n", WARNING_PREPEND, other_buffer);
+          keep_alive_flag = 0;
         }else{
           //pass parsed data to the requests handler
           printf("method: %s | path: %s | host: %s | connection: %s\n", req.method, req.path, req.host, connection_types[req.connection]);
