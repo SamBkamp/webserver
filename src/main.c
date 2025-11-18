@@ -163,9 +163,10 @@ int main(){
     if(clients_connected < CLIENTS_MAX){
       //check for new connections
       int new_conn = new_ssl_connections(&poll_settings, tail, sslctx, ssl_sockfd);
-      clients_connected += new_conn;
-      if(new_conn > 0)
-        printf("clients: %d\n", clients_connected);
+      if(new_conn > 0){
+        clients_connected += new_conn;
+        printf("new connection. clients: %d\n", clients_connected);
+      }
     }
 
 
@@ -188,8 +189,7 @@ int main(){
         else
           puts(" pollhup");
         keep_alive_flag = 0;
-      }
-      if((poll_settings.revents & POLLIN) > 0 && client_poll >= 0){
+      }else if((poll_settings.revents & POLLIN) > 0 && client_poll >= 0){
         //read and parse data
         char buffer[2048];
         char other_buffer[2049];
@@ -213,7 +213,7 @@ int main(){
       if(current_time < KEEP_ALIVE_TIMEOUT && keep_alive_flag > 0)
         continue;
       //close connection and remove from LL
-      puts("closing connection");
+      printf("closing connection. Clients: %d\n", clients_connected);
       prev_conn->next = conn->next;
       if(prev_conn->next == NULL)
         tail = prev_conn; //update tail if needed
