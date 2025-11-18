@@ -213,7 +213,6 @@ int main(){
       if(current_time < KEEP_ALIVE_TIMEOUT && keep_alive_flag > 0)
         continue;
       //close connection and remove from LL
-      printf("closing connection. Clients: %d\n", clients_connected);
       prev_conn->next = conn->next;
       if(prev_conn->next == NULL)
         tail = prev_conn; //update tail if needed
@@ -221,6 +220,7 @@ int main(){
       free_http_request(&req);
       conn = prev_conn;
       clients_connected--;
+      printf("closing connection. Clients: %d\n", clients_connected);
     }
   }
   SSL_CTX_free(sslctx);
