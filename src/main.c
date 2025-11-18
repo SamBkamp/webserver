@@ -105,7 +105,6 @@ ssize_t requests_handler(http_request *req, http_response *res, ll_node *conn_de
 
 int main(){
   int ssl_sockfd, unsecured_sockfd, clients_connected = 0;
-  char buffer[1024];
   struct pollfd poll_settings = {   //default poll settings, just add your fd
     .events = POLLIN | POLLOUT
   };
@@ -194,7 +193,8 @@ int main(){
       }
       if((poll_settings.revents & POLLIN) > 0 && client_poll >= 0){
         //read and parse data
-        bytes_read = SSL_read(conn->cSSL, buffer, 1023);
+        char buffer[2048];
+        bytes_read = SSL_read(conn->cSSL, buffer, 2047);
         buffer[bytes_read] = 0;
         if(parse_http_request(&req, buffer) < 0
            || req.path == NULL
