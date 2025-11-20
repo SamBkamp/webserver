@@ -115,7 +115,7 @@ ssize_t requests_handler(http_request *req, http_response *res, ll_node *conn_de
   if(file_data->data == (char *)-1 || *file_path == (char)-1){
     res->response_code = 404;
     res->body = files.not_found->data;
-    res->content_length = file_data->length;
+    res->content_length = files.not_found->length;
     res->content_type = "text/html";
     send_http_response(conn_details, res);
     return 0;
@@ -220,21 +220,20 @@ int main(){
       //poll socket
       if((secured_sockets[connection_index].revents & POLLHUP) > 0
          || (secured_sockets[connection_index].revents & POLLERR) > 0){
-        fputs(WARNING_PREPEND, stdout);
-        if((secured_sockets[connection_index].revents & POLLERR)>0)
-          puts(" pollerr");
-        else
-          puts(" pollhup");
         keep_alive_flag = 0;
       }else if((secured_sockets[connection_index].revents & POLLIN) > 0){
         //read and parse data
         char buffer[2048];
         bytes_read = SSL_read(conn->cSSL, buffer, 2047);
         buffer[bytes_read] = 0;
-        if(parse_http_request(&req, buffer) < 0
+        if(bytes_read <= 0){
+          fputs(SSL_ERROR_PREPEND, stdout);
+          print_SSL_accept_err(SSL_get_error(conn->cSSL, bytes_read));
+          keep_alive_flag = 0;
+        }else if(parse_http_request(&req, buffer) < 0
            || req.path == NULL
            || req.host == NULL){
-          printf("%s malformed query sent\n length: %d\n", WARNING_PREPEND, bytes_read);
+          printf("%s malformed query sent. length: %d\n", WARNING_PREPEND, bytes_read);
           keep_alive_flag = 0;
         }else{
           //pass parsed data to the requests handler
@@ -260,7 +259,7 @@ int main(){
     //reconstitute the pollfd array.. sigh
     uint16_t node_index = 0;
     for(ll_node *node = head.next; node != NULL; node = node->next)
-      secured_sockets[node_index].fd = node->fd;
+      secured_sockets[node_index++].fd = node->fd;
   }
   SSL_CTX_free(sslctx);
 }
