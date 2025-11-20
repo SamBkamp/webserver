@@ -132,10 +132,7 @@ ssize_t requests_handler(http_request *req, http_response *res, ll_node *conn_de
 
 int main(){
   int ssl_sockfd, unsecured_sockfd, clients_connected = 0;
-  struct pollfd listener_sockets[2];
-  struct pollfd poll_settings = {   //default poll settings, just add your fd
-    .events = POLLIN | POLLOUT
-  };
+  struct pollfd listener_sockets[2], secured_sockets[CLIENTS_MAX];
   ll_node head = {
     .fd = 0,
     .next = NULL
@@ -192,11 +189,11 @@ int main(){
     .fd = ssl_sockfd,
     .events = POLLIN | POLLOUT
   };
+
   //main event loop
   while(1){
     int ret_poll = poll(listener_sockets, 2, POLL_TIMEOUT);
     //check for unsecured connections (on HTTP_PORT)
-
     check_unsec_connection(&listener_sockets[0]);
 
     if(clients_connected < CLIENTS_MAX){
@@ -204,41 +201,40 @@ int main(){
       ll_node *new_conn = new_ssl_connections(&listener_sockets[1], tail, sslctx, ssl_sockfd);
       if(new_conn != NULL){
         tail = new_conn;
+        secured_sockets[clients_connected].fd = new_conn->fd;
+        secured_sockets[clients_connected].events = POLLIN | POLLOUT;
         printf("new connection [%ld]. clients: %d\n", tail->conn_opened, ++clients_connected);
       }
     }
 
-
+    ret_poll = poll(secured_sockets, clients_connected, POLL_TIMEOUT);
     //service existing connections
+    //i hate how poll needs an array ughhhh
+    uint16_t connection_index = 0;
     ll_node *prev_conn = &head;
     for(ll_node *conn = head.next; conn != NULL; prev_conn = conn, conn = conn->next){
-      int client_poll, bytes_read;
+      int bytes_read;
       uint8_t keep_alive_flag = 1;
       http_request req = {0};
       http_response res = {0};
-      poll_settings.fd = conn->fd;
-
       //poll socket
-      client_poll = poll(&poll_settings, 1, POLL_TIMEOUT);
-      if((poll_settings.revents & POLLHUP) > 0
-         || (poll_settings.revents & POLLERR) > 0){
+      if((secured_sockets[connection_index].revents & POLLHUP) > 0
+         || (secured_sockets[connection_index].revents & POLLERR) > 0){
         fputs(WARNING_PREPEND, stdout);
-        if((poll_settings.revents & POLLERR)>0)
+        if((secured_sockets[connection_index].revents & POLLERR)>0)
           puts(" pollerr");
         else
           puts(" pollhup");
         keep_alive_flag = 0;
-      }else if((poll_settings.revents & POLLIN) > 0 && client_poll >= 0){
+      }else if((secured_sockets[connection_index].revents & POLLIN) > 0){
         //read and parse data
         char buffer[2048];
-        char other_buffer[2049];
         bytes_read = SSL_read(conn->cSSL, buffer, 2047);
         buffer[bytes_read] = 0;
-        strcpy(other_buffer, buffer);
         if(parse_http_request(&req, buffer) < 0
            || req.path == NULL
            || req.host == NULL){
-          printf("%s malformed query sent\n length: %d request: %s\n", WARNING_PREPEND, bytes_read, other_buffer);
+          printf("%s malformed query sent\n length: %d\n", WARNING_PREPEND, bytes_read);
           keep_alive_flag = 0;
         }else{
           //pass parsed data to the requests handler
@@ -247,7 +243,7 @@ int main(){
           keep_alive_flag = req.connection & res.connection;
         }
       }
-
+      connection_index++;
       if(((time(NULL) - conn->conn_opened) < KEEP_ALIVE_TIMEOUT) && keep_alive_flag > 0)
         continue;
       //close connection and remove from LL
@@ -261,6 +257,10 @@ int main(){
       clients_connected--;
       printf("Clients: %d\n", clients_connected);
     }
+    //reconstitute the pollfd array.. sigh
+    uint16_t node_index = 0;
+    for(ll_node *node = head.next; node != NULL; node = node->next)
+      secured_sockets[node_index].fd = node->fd;
   }
   SSL_CTX_free(sslctx);
 }
