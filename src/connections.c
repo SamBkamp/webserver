@@ -95,23 +95,34 @@ void check_unsec_connection(struct pollfd *poll_settings){
 }
 
 int send_http_response(ll_node* connection, http_response *res){
-  char buffer[1024];
-  size_t bytes_written;
+  char *buffer = malloc(res->content_length + 1024);
+  size_t bytes_printed;
   //response category (ie. first digit of response code)
   int response_cat = res->response_code - (res->response_code % 100);
   switch (response_cat){
   case 300:
-    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\nConnection: %s\r\n\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location, connection_types[res->connection]);
+    bytes_printed = sprintf(buffer, "HTTP/1.1 %d %s\r\nLocation: https://%s\r\nConnection: %s\r\n\r\n", res->response_code, msd[2][res->response_code-response_cat], res->location, connection_types[res->connection]);
     break;
   default:
-    bytes_written = sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: %s\r\n\r\n%s\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, connection_types[res->connection], res->body);
+    bytes_printed = sprintf(buffer, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length:%ld\r\nConnection: %s\r\n\r\n", res->response_code, msd[(response_cat/100)-1][res->response_code-response_cat], res->content_type, res->content_length, connection_types[res->connection]);
+    memcpy(buffer+bytes_printed, res->body, res->content_length);
+    bytes_printed+=res->content_length;
+    *(buffer+bytes_printed) = '\r';
+    bytes_printed++;
+    *(buffer+bytes_printed) = '\n';
+    bytes_printed++;
     break;
   }
 
+  int bytes;
   if(connection->cSSL != NULL)
-    return SSL_write(connection->cSSL, buffer, bytes_written);
+    bytes = SSL_write(connection->cSSL, buffer, bytes_printed);
   else
-    return write(connection->fd, buffer, bytes_written);
+    bytes = write(connection->fd, buffer, bytes_printed);
+
+  if(bytes != (int)bytes_printed)
+    printf("%s ITS ALL FRIED, INCOMPLETE WRITE\n", ERROR_PREPEND);
+  return bytes;
 }
 
 //handler function to accept new SSL connections and append them to the Lnked List

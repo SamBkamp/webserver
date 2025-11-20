@@ -22,10 +22,36 @@
 //I reckon this implementation might be temporary
 #define MAX_OPEN_FILES 20
 
+typedef struct {
+    char *ext;
+    char *mime;
+} mime_type_t;
+
+static mime_type_t mime_types[] = {
+    {"html", "text/html; charset=utf-8"},
+    {"htm",  "text/html; charset=utf-8"},
+    {"css",  "text/css; charset=utf-8"},
+    {"js",   "application/javascript"},
+    {"json", "application/json"},
+    {"png",  "image/png"},
+    {"jpg",  "image/jpeg"},
+    {"jpeg", "image/jpeg"},
+    {"gif",  "image/gif"},
+    {"webp", "image/webp"},
+    {"svg",  "image/svg+xml"},
+    {"ico",  "image/x-icon"},
+    {"txt",  "text/plain; charset=utf-8"},
+    {"pdf",  "application/pdf"},
+    {"zip",  "application/zip"},
+    {"wasm", "application/wasm"},
+    {NULL,   "application/octet-stream"}  // default + sentinel
+};
+
+
 root_file_data files;
 
 //file handler: handles file loading and caching. Simply returns file contents. Lazy loads into the cache
-char *get_file_data(char* path){
+loaded_file *get_file_data(char* path){
   loaded_file *file = files.loaded_files;
   size_t i = 0;
   //todo: derive i from file so you only need to increment one var
@@ -38,22 +64,28 @@ char *get_file_data(char* path){
 
   //cached file hit
   if(i < MAX_OPEN_FILES && file->file_path != NULL)
-    return file->data;
+    return file;
 
   //cache miss
-  char *file_data = open_file(path);
   loaded_file *new_load;
-  //space to allocate
+  //we space to allocate
   if(file->file_path == NULL)
     new_load = file;
-  else//no space to allocate (allocate to first)
+  else//no space to allocate (allocate to first) EEP! this doesn't munmap the previous first element
     new_load = &files.loaded_files[0];
 
+  new_load->data = open_file(path, &new_load->length);
   //can I store file name data in mmap region? ie say the file is only 3kb large, I still have another 1kb of unused page. Can I store metadata there?
   new_load->file_path = malloc(strlen(path)+1);
   strcpy(new_load->file_path, path);
-  new_load->data = file_data;
-  return file_data;
+  char *file_type = get_file_type(path);
+  mime_type_t *type;
+  for(type = mime_types; type->ext != NULL; type++){
+    if(strcmp(type->ext, file_type) == 0)
+      break;
+  }
+  new_load->mimetype = type->mime;
+  return new_load;
 }
 
 //takes a request struct and sends back appropriate data to client
@@ -77,25 +109,22 @@ ssize_t requests_handler(http_request *req, http_response *res, ll_node *conn_de
   //open file
   char file_path[sizeof(DOCUMENT_ROOT) + strlen(req->path) + 20];
   format_dirs(req->path, file_path);
-  char *file_data = get_file_data(file_path);
+  loaded_file *file_data = get_file_data(file_path);
 
   //file can't be opened for one reason or another
-  if(file_data == (char *)-1 || *file_path == (char)-1){
+  if(file_data->data == (char *)-1 || *file_path == (char)-1){
     res->response_code = 404;
     res->body = files.not_found->data;
-    res->content_length = strlen(res->body);
+    res->content_length = file_data->length;
     res->content_type = "text/html";
     send_http_response(conn_details, res);
     return 0;
   }
-  //todo, do this with something simpler (and faster) than printf family
-  char content_buffer[20];
-  snprintf(content_buffer, 20, "text/%s", get_file_type(file_path));
   //if file is valid and openable
   res->response_code = 200;
-  res->content_type = content_buffer;
-  res->content_length = strlen(file_data);
-  res->body = file_data;
+  res->content_type = file_data->mimetype;
+  res->content_length = file_data->length;
+  res->body = file_data->data;
   send_http_response(conn_details, res);
   return 0;
 }

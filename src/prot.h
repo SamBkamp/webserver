@@ -49,7 +49,9 @@ typedef struct{
 
 typedef struct{
   char *file_path;
+  char *mimetype;
   char *data;
+  long length;
 }loaded_file;
 
 typedef struct{

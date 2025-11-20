@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -72,9 +73,11 @@ char *get_file_type(char* path){
   if(path == NULL)
     return (char *)-1;
   char *end = path + strlen(path)-1;
-
-  while(end != path-1 && *end != '.')
+  //if we don't find a . before the first / then the file doesn't have a fle extension
+  while(end != path-1 && *end != '.' && *end != '/')
     end--;
+  if (*end != '.')
+    return path;
   return end+1;
 }
 
@@ -152,11 +155,19 @@ char* long_to_ip(char* out, unsigned long IP){
   return out;
 }
 //OPENS FOR READ ONLY
-char *open_file(char *path){
+//off_t is coerced into a long here, but this may not be portable. off_t isn't standard C (bruh), but standard posix (which doesn't give any info abt its width other than its signed...)
+//im just gonna assume this works until it doesn't
+char *open_file(char *path, long *bytes){
+  struct stat sb;
   int filefd = open(path, O_RDONLY);
   if(filefd < 0)
     return MAP_FAILED;
-  char *retval = mmap(NULL, 4096, PROT_READ, MAP_SHARED, filefd, 0);
+  if(fstat(filefd, &sb)< 0){
+    close(filefd);
+    return MAP_FAILED;
+  }
+  *bytes = sb.st_size;
+  char *retval = mmap(NULL, sb.st_size, PROT_READ, MAP_SHARED, filefd, 0);
   close(filefd);
   return retval;
 }
@@ -169,13 +180,13 @@ int load_default_files(root_file_data *root_file_st){
   not_found_file = malloc(sizeof(loaded_file));
   not_found_file->file_path = malloc(strlen("default/not_found.html"));
   strcpy(not_found_file->file_path, "default/not_found.html");
-  not_found_file->data = open_file(not_found_file->file_path);
+  not_found_file->data = open_file(not_found_file->file_path, &not_found_file->length);
   root_file_st->not_found = not_found_file;
 
   internal_server_error = malloc(sizeof(loaded_file));
   internal_server_error->file_path = malloc(strlen("default/internal_server_error.html"));
   strcpy(internal_server_error->file_path, "default/internal_server_error.html");
-  internal_server_error->data = open_file(internal_server_error->file_path);
+  internal_server_error->data = open_file(internal_server_error->file_path, &internal_server_error->length);
   root_file_st->internal_server_error = internal_server_error;
 
   if(internal_server_error->data == MAP_FAILED
