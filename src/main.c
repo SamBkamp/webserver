@@ -247,8 +247,9 @@ int main(){
           keep_alive_flag = 0;
         }
         else{
+          char ip_string[20];
           //pass parsed data to the requests handler
-          printf("method: %s | path: %s | host: %s | connection: %s\n", req.method, req.path, req.host, connection_types[req.connection]);
+          printf("[%s-%d-%d/%d] method: %s | path: %s | host: %s | connection: %s\n", long_to_ip(ip_string, conn->peer_addr->sin_addr.s_addr), conn->fd, connection_index+1, clients_connected, req.method, req.path, req.host, connection_types[req.connection]);
           requests_handler(&req, &res, conn);
           keep_alive_flag = req.connection & res.connection;
         }
@@ -269,7 +270,6 @@ int main(){
       clients_connected--;
       //remove fd from pollfd array by moving all subsequent items down one (this shouldnt out of bounds bc in the case where connection_index+1 = out of bounds, last argument is 0)
       memmove(&secured_sockets[connection_index], &secured_sockets[connection_index+1], sizeof(struct pollfd) * (clients_connected-connection_index));
-      printf("Clients: %d\n", clients_connected);
     }
   }
   SSL_CTX_free(sslctx);
