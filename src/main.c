@@ -66,6 +66,8 @@ loaded_file *get_file_data(char* path){
   if(file->file_path == NULL)
     new_load = file;
   else{ //no space to allocate (allocate to first)
+    fputs(WARNING_PREPEND, stderr);
+    fputs("File cache full, wrap around\n");
     free(files.loaded_files[0].file_path);
     munmap(files.loaded_files[0].data, files.loaded_files[0].length);
     new_load = &files.loaded_files[0];
