@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/mman.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -61,11 +62,15 @@ loaded_file *get_file_data(char* path){
 
   //cache miss
   loaded_file *new_load;
-  //we space to allocate
+  //we have space to allocate
   if(file->file_path == NULL)
     new_load = file;
-  else//no space to allocate (allocate to first) EEP! this doesn't munmap the previous first element
+  else{ //no space to allocate (allocate to first)
+    free(files.loaded_files[0].file_path);
+    munmap(files.loaded_files[0].data, files.loaded_files[0].length);
     new_load = &files.loaded_files[0];
+  }
+
 
   new_load->data = open_file(path, &new_load->length);
   //can I store file name data in mmap region? ie say the file is only 3kb large, I still have another 1kb of unused page. Can I store metadata there?
