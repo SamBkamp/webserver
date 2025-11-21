@@ -6,7 +6,7 @@
 #define HTTPS_PORT 443
 #define CLIENTS_MAX 10
 #define QUEUE_LEN 10
-#define POLL_TIMEOUT 100
+#define POLL_TIMEOUT 50
 #define METHOD_GET 1
 #define METHOD_POST 2
 
@@ -60,4 +60,8 @@ typedef struct{
   loaded_file *internal_server_error;
 }root_file_data;
 
+typedef struct {
+    char *ext;
+    char *mime;
+} mime_type_t;
 #endif

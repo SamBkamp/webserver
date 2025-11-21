@@ -22,11 +22,6 @@
 //I reckon this implementation might be temporary
 #define MAX_OPEN_FILES 20
 
-typedef struct {
-    char *ext;
-    char *mime;
-} mime_type_t;
-
 static mime_type_t mime_types[] = {
     {"html", "text/html; charset=utf-8"},
     {"htm",  "text/html; charset=utf-8"},
