@@ -53,17 +53,15 @@ root_file_data files;
 //file handler: handles file loading and caching. Simply returns file contents. Lazy loads into the cache
 loaded_file *get_file_data(char* path){
   loaded_file *file = files.loaded_files;
-  size_t i = 0;
-  //todo: derive i from file so you only need to increment one var
-  while(i < MAX_OPEN_FILES
+
+  while((file-files.loaded_files) < MAX_OPEN_FILES
         && file->file_path != NULL
-        && strcmp(file->file_path, path)!=0){
+        && strcmp(file->file_path, path)!=0)
     file++;
-    i++;
-  }
 
   //cached file hit
-  if(i < MAX_OPEN_FILES && file->file_path != NULL)
+  if((file-files.loaded_files) < MAX_OPEN_FILES
+     && file->file_path != NULL)
     return file;
 
   //cache miss
