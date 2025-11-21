@@ -67,7 +67,7 @@ loaded_file *get_file_data(char* path){
     new_load = file;
   else{ //no space to allocate (allocate to first)
     fputs(WARNING_PREPEND, stderr);
-    fputs("File cache full, wrap around\n");
+    fputs("File cache full, wrap around\n", stderr);
     free(files.loaded_files[0].file_path);
     munmap(files.loaded_files[0].data, files.loaded_files[0].length);
     new_load = &files.loaded_files[0];
@@ -151,7 +151,7 @@ int main(){
   //load default files into memory. Doesn't abort - should it?
   if(load_default_files(&files) == -1){
     fputs(WARNING_PREPEND, stderr);
-    perror(" Couldn't load 404/500 error files");
+    perror("Couldn't load 404/500 error files");
   }
 
   //load openSSL nonsense (algos and strings)
@@ -196,20 +196,29 @@ int main(){
     //check for unsecured connections (on HTTP_PORT)
     check_unsec_connection(&listener_sockets[0]);
 
-    if(clients_connected < CLIENTS_MAX){
+    if(clients_connected < CLIENTS_MAX && ret_poll > 0){
       //check for new connections
       ll_node *new_conn = new_ssl_connections(&listener_sockets[1], tail, sslctx, ssl_sockfd);
       if(new_conn != NULL){
         tail = new_conn;
         secured_sockets[clients_connected].fd = new_conn->fd;
         secured_sockets[clients_connected].events = POLLIN | POLLOUT;
-        printf("new connection [%ld]. clients: %d\n", tail->conn_opened, ++clients_connected);
+        ++clients_connected;
+        //printf("new connection [%ld]. clients: %d\n", tail->conn_opened, clients_connected); //<-- logging that I don't think is useful in a prod env but don't wanna delete
       }
     }
 
+    //poll existing connections
     ret_poll = poll(secured_sockets, clients_connected, POLL_TIMEOUT);
+    if(ret_poll<0){
+      fputs(ERROR_PREPEND, stderr);
+      fputs("poll failure\n", stderr);
+      continue;
+    }
+    if(ret_poll == 0) //no fd ready
+      continue;
+
     //service existing connections
-    //i hate how poll needs an array ughhhh
     uint16_t connection_index = 0;
     ll_node *prev_conn = &head;
     for(ll_node *conn = head.next; conn != NULL; prev_conn = conn, conn = conn->next){
@@ -217,11 +226,11 @@ int main(){
       uint8_t keep_alive_flag = 1;
       http_request req = {0};
       http_response res = {0};
-      //poll socket
+      //get poll results
       if((secured_sockets[connection_index].revents & POLLHUP) > 0
-         || (secured_sockets[connection_index].revents & POLLERR) > 0){
+         || (secured_sockets[connection_index].revents & POLLERR) > 0)
         keep_alive_flag = 0;
-      }else if((secured_sockets[connection_index].revents & POLLIN) > 0){
+      else if((secured_sockets[connection_index].revents & POLLIN) > 0){
         //read and parse data
         char buffer[2048];
         bytes_read = SSL_read(conn->cSSL, buffer, 2047);
@@ -230,36 +239,38 @@ int main(){
           fputs(SSL_ERROR_PREPEND, stdout);
           print_SSL_accept_err(SSL_get_error(conn->cSSL, bytes_read));
           keep_alive_flag = 0;
-        }else if(parse_http_request(&req, buffer) < 0
+        }
+        else if(parse_http_request(&req, buffer) < 0
            || req.path == NULL
            || req.host == NULL){
           printf("%s malformed query sent. length: %d\n", WARNING_PREPEND, bytes_read);
           keep_alive_flag = 0;
-        }else{
+        }
+        else{
           //pass parsed data to the requests handler
           printf("method: %s | path: %s | host: %s | connection: %s\n", req.method, req.path, req.host, connection_types[req.connection]);
           requests_handler(&req, &res, conn);
           keep_alive_flag = req.connection & res.connection;
         }
-      }
-      connection_index++;
-      if(((time(NULL) - conn->conn_opened) < KEEP_ALIVE_TIMEOUT) && keep_alive_flag > 0)
+      }//close poll section
+
+      if(((time(NULL) - conn->conn_opened) < KEEP_ALIVE_TIMEOUT) && keep_alive_flag > 0){
+        connection_index++;
         continue;
+      }
+
       //close connection and remove from LL
-      printf("closing connection [%ld] ", conn->conn_opened);
+      //printf("closing connection [%ld] ", conn->conn_opened); <-- logging that I don't think is useful in a prod env but don't wanna delete
       prev_conn->next = conn->next;
-      if(prev_conn->next == NULL)
-        tail = prev_conn; //update tail if needed
+      if(prev_conn->next == NULL) tail = prev_conn; //update tail if needed
       destroy_node(conn);
       free_http_request(&req);
       conn = prev_conn;
       clients_connected--;
+      //remove fd from pollfd array by moving all subsequent items down one (this shouldnt out of bounds bc in the case where connection_index+1 = out of bounds, last argument is 0)
+      memmove(&secured_sockets[connection_index], &secured_sockets[connection_index+1], sizeof(struct pollfd) * (clients_connected-connection_index));
       printf("Clients: %d\n", clients_connected);
     }
-    //reconstitute the pollfd array.. sigh
-    uint16_t node_index = 0;
-    for(ll_node *node = head.next; node != NULL; node = node->next)
-      secured_sockets[node_index++].fd = node->fd;
   }
   SSL_CTX_free(sslctx);
 }

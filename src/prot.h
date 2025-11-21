@@ -16,9 +16,9 @@
 #define KEEP_ALIVE_MAX_REQ 4
 #define KEEP_ALIVE_TIMEOUT 20 //in seconds
 
-#define SSL_ERROR_PREPEND "\x1B[1;31m[SSL_ERROR]\x1B[0m"
-#define ERROR_PREPEND "\x1B[1;31m[ERROR]\x1B[0m"
-#define WARNING_PREPEND "\x1B[1;33m[WARN]\x1B[0m"
+#define SSL_ERROR_PREPEND "\x1B[1;31m[SSL_ERROR]\x1B[0m "
+#define ERROR_PREPEND "\x1B[1;31m[ERROR]\x1B[0m "
+#define WARNING_PREPEND "\x1B[1;33m[WARN]\x1B[0m "
 
 typedef struct ll_node{
   uint8_t requests;
